@@ -20,7 +20,12 @@ class MatlabStimulusLoader(StimulusLoader):
         self.mat_path = mat_path
 
     def load(self):
-        stimulus = loadmat(self.mat_path, squeeze_me=True)
+        try:
+            stimulus = loadmat(self.mat_path, squeeze_me=True)
+        except FileNotFoundError as e:
+            print(e)
+        else:
+            print(f'Successfully loaded {self.mat_path}!')
         images = np.array(stimulus['stimulus']['images']).ravel()[0].T
         frames_to_show = stimulus['stimulus']['seq'].ravel()[0]
         indexed_matrix = np.zeros((len(frames_to_show), images.shape[1], images.shape[2]), dtype=np.uint8)
@@ -28,6 +33,13 @@ class MatlabStimulusLoader(StimulusLoader):
             indexed_matrix[i] = images[frame - 1]
         lut = stimulus['stimulus']['cmap'].ravel()[0]
         frame_duration = stimulus['stimulus']['seqtiming'].ravel()[0][1]
+        
+        # convert lut to what psychopy expects
+        if lut.max() > 1. and lut.max() <= 255:
+            lut /= 255
+        lut = lut * 2 - 1
+        print(lut)
+            
         return indexed_matrix, lut, frame_duration
 
 # ----------- Python Loader -----------
@@ -109,8 +121,6 @@ class PRFStimulusPresenter:
             fullscr=True,
             screen=self.screen,
             color=[0,0,0],
-            winType='glfw',
-            useRetina=False
         )
         self.fixation_type = fixation_type
         if fixation_type == 'dot':
@@ -174,9 +184,7 @@ class PRFStimulusPresenter:
             if t >= (frame_idx * self.frame_duration):
                 idx = self.indexed_matrix[frame_idx]
                 rgb = self.lut[idx]
-                rgb_float = rgb.astype(np.float32) / 255.0
-                rgb_rescaled = (rgb_float * 2.0) - 1.0
-                self.img_stim.image = rgb_rescaled
+                self.img_stim.image = rgb
                 self.img_stim.draw()
                 self.fixation.update()
                 self.fixation.draw()
@@ -205,7 +213,7 @@ class PRFStimulusPresenter:
 # For MATLAB stimuli:
 if __name__ == "__main__":
     loader = MatlabStimulusLoader('./bar_smooth_test_stimulus.mat')
-    presenter = PRFStimulusPresenter(loader, fixation_type='dot', screen=0)
+    presenter = PRFStimulusPresenter(loader, fixation_type='dot', screen=1)
     presenter.run(subject='01', session='01', run='01', outdir='./bids_logs')
     # presenter.run(subject='01', session='01', run='02', outdir='./bids_logs')
 
