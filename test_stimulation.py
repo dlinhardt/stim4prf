@@ -294,7 +294,7 @@ class PRFStimulusPresenter:
             image=dummy_rgb,
             units='pix',
             size=(w, h),
-            colorSpace='rgb1'
+            colorSpace='rgb'
         )
 
     def run(
