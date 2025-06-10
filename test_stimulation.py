@@ -123,18 +123,23 @@ class FixationDot(Fixation):
         self.colors = colors
         self.color_switch_prob = color_switch_prob
         self.current_color = colors[0]
-        # Create a colored dot for fixation
+        self.last_switch_time = None  # Track last switch time
+        self.switch_log = []          # Store (time, new_color)
+        self.min_switch_interval = 2.0  # Minimum time between color changes (seconds)
         self.circle = visual.Circle(win, radius=self.radius, fillColor=self.current_color,
                                    lineColor=self.current_color, pos=(0,0), units='pix')
 
-    def update(self):
-        # Occasionally switch color
-        if random.random() < self.color_switch_prob:
-            self.current_color = self.colors[1] if self.current_color == self.colors[0] else self.colors[0]
-            self.circle.fillColor = self.current_color
-            self.circle.lineColor = self.current_color
-            if self.verbose:
-                print(f"[stim4prf][fixation] Color switched to {self.current_color}")
+    def update(self, now=None):
+        # Occasionally switch color, but only if min_switch_interval has passed
+        if now is None:
+            return
+        if self.last_switch_time is None or (now - self.last_switch_time) >= self.min_switch_interval:
+            if random.random() < self.color_switch_prob:
+                self.current_color = self.colors[1] if self.current_color == self.colors[0] else self.colors[0]
+                self.circle.fillColor = self.current_color
+                self.circle.lineColor = self.current_color
+                self.last_switch_time = now
+                self.switch_log.append((now, self.current_color))
 
     def draw(self):
         self.circle.draw()
@@ -155,17 +160,22 @@ class FixationCross(Fixation):
         self.colors = colors
         self.color_switch_prob = color_switch_prob
         self.current_color = colors[0]
-        # Create a colored cross for fixation
+        self.last_switch_time = None  # Track last switch time
+        self.switch_log = []          # Store (time, new_color)
+        self.min_switch_interval = 2.0  # Minimum time between color changes (seconds)
         self.text = visual.TextStim(win, text='+', color=self.current_color,
                                    height=self.size, pos=(0,0))
 
-    def update(self):
-        # Occasionally switch color
-        if random.random() < self.color_switch_prob:
-            self.current_color = self.colors[1] if self.current_color == self.colors[0] else self.colors[0]
-            self.text.color = self.current_color
-            if self.verbose:
-                print(f"[stim4prf][fixation] Color switched to {self.current_color}")
+    def update(self, now=None):
+        # Occasionally switch color, but only if min_switch_interval has passed
+        if now is None:
+            return
+        if self.last_switch_time is None or (now - self.last_switch_time) >= self.min_switch_interval:
+            if random.random() < self.color_switch_prob:
+                self.current_color = self.colors[1] if self.current_color == self.colors[0] else self.colors[0]
+                self.text.color = self.current_color
+                self.last_switch_time = now
+                self.switch_log.append((now, self.current_color))
 
     def draw(self):
         self.text.draw()
@@ -191,8 +201,6 @@ class PRFStimulusPresenter:
         self.verbose = verbose
         self.trigger_key = trigger_key
         self.abort_key = abort_key
-        self.end_screen_wait = end_screen_wait
-        self.frame_log_interval = frame_log_interval
 
         # Mac external display fix: query pixel size with pyglet
         display = pyglet.canvas.get_display()
@@ -252,14 +260,15 @@ class PRFStimulusPresenter:
         subject: str,
         session: str,
         run: str,
-        outdir: str
+        outdir: str,
+        button_keys: list = ['1', '2', '3', '4']  # Add button keys to monitor
     ):
         """
         Run the stimulus presentation.
         Handles trigger wait, stimulus loop, and logging.
+        Logs frame onsets, fixation color changes, and button presses.
         """
         import csv
-        # Prepare log file
         timestamp = datetime.now().strftime('%Y%m%dT%H%M%S')
         log_fname = os.path.join(
             outdir,
@@ -285,7 +294,7 @@ class PRFStimulusPresenter:
                 if keys:
                     if keys[0].name == self.abort_key:
                         print("[stim4prf] Aborted by user.")
-                        return  # Window closed in finally
+                        return
                     elif keys[0].name == self.trigger_key:
                         break
                 core.wait(0.001)
@@ -294,20 +303,38 @@ class PRFStimulusPresenter:
 
             global_clock = core.Clock()
             frame_onsets = []
+            button_events = []  # Store (time, key)
+            prev_button_state = set()
+
             frame_idx = 0
 
             # Main stimulus presentation loop
             while frame_idx < self.nFrames:
+                # Abort check
                 if kb.getKeys(keyList=[self.abort_key], waitRelease=False):
                     print("[stim4prf] Aborted by user.")
                     return
+
                 t = global_clock.getTime()
+
+                # Button press monitoring (log all new presses)
+                pressed = kb.getKeys(keyList=button_keys, waitRelease=False, clear=False)
+                for key in pressed:
+                    # Only log new presses (not held keys)
+                    if key.name not in prev_button_state:
+                        button_events.append((t, key.name))
+                        prev_button_state.add(key.name)
+                # Remove keys that are no longer pressed
+                current_pressed = set(k.name for k in pressed)
+                prev_button_state = prev_button_state & current_pressed
+
                 if t >= (frame_idx * self.frame_duration):
                     idx = self.indexed_matrix[frame_idx]
                     rgb = self.lut[idx]
                     self.img_stim.image = rgb
                     self.img_stim.draw()
-                    self.fixation.update()
+                    # Pass current time to fixation update for color switch logging
+                    self.fixation.update(now=t)
                     self.fixation.draw()
                     self.win.flip()
                     frame_onsets.append(t)
@@ -324,19 +351,22 @@ class PRFStimulusPresenter:
             self.win.flip()
             core.wait(self.end_screen_wait)
 
-            # Write timing log
+            # Write timing log (frames, color switches, button presses)
             with open(log_fname, 'w', newline='') as f:
                 writer = csv.writer(f, delimiter='\t')
-                writer.writerow(['FrameIndex', 'OnsetTime'])
+                writer.writerow(['Event', 'Time', 'Value'])
                 for idx, onset in enumerate(frame_onsets):
-                    writer.writerow([idx, onset])
+                    writer.writerow(['frame_onset', onset, idx])
+                for t, color in getattr(self.fixation, 'switch_log', []):
+                    writer.writerow(['fixation_color_switch', t, color])
+                for t, key in button_events:
+                    writer.writerow(['button_press', t, key])
             if self.verbose:
                 print(f"[stim4prf] Saved timing log: {log_fname}")
         except Exception as e:
             print(f"[stim4prf][ERROR] Exception during run: {e}")
             raise
         finally:
-            # Ensure window is closed even if error or abort
             if hasattr(self, 'win') and self.win:
                 self.win.close()
 
