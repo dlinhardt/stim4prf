@@ -58,11 +58,6 @@ class MatlabStimulusLoader(StimulusLoader):
                 logger.warning(f"LUT maximum unusually high: {lut_max}")
         if self.verbose:
             logger.info("Scaling LUT to [-1,1] for PsychoPy")
-        #lut = (lut * 2.0) - 1.0
-        if lut.min() < -1. or lut.max() > 1.:
-            logger.warning(f"LUT has values outside [-1,1]: min={lut.min()}, max={lut.max()}")
-        if self.verbose:
-            logger.info(f"LUT after scaling: min={lut.min()}, max={lut.max()}")
 
         frame_duration = stimulus['stimulus']['seqtiming'].ravel()[0][1]
         if self.verbose:
