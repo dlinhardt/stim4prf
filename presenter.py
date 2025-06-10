@@ -16,7 +16,7 @@ class PRFStimulusPresenter:
     """
     def __init__(
         self,
-        loader: StimulusLoader,
+        loader,
         fixation_type: str = 'dot',
         screen: int = 0,
         verbose: bool = False,
@@ -60,7 +60,8 @@ class PRFStimulusPresenter:
             units='pix',
             fullscr=True,
             screen=self.screen,
-            color=[0,0,0],
+            colorSpace='rgb1',
+            color=[0.5,0.5,0.5],
         )
         # Choose fixation type
         if fixation_type == 'dot':
@@ -91,7 +92,7 @@ class PRFStimulusPresenter:
             image=dummy_rgb,
             units='pix',
             size=(w, h),
-            colorSpace='rgb'
+            colorSpace='rgb1'
         )
 
     def run(
@@ -100,7 +101,7 @@ class PRFStimulusPresenter:
         session: str,
         run: str,
         outdir: str,
-        button_keys: list[str] = ['1', '2', '3', '4']
+        button_keys = ['1', '2', '3', '4']
     ) -> None:
         """
         Run the stimulus presentation.
@@ -121,7 +122,7 @@ class PRFStimulusPresenter:
         self.win.flip()
         kb = keyboard.Keyboard()
         kb.clearEvents()
-        core.wait(0.5)
+        core.wait(0.2)
         if self.verbose:
             logger.info("Awaiting scanner trigger...")
 
@@ -161,7 +162,7 @@ class PRFStimulusPresenter:
                 if t >= (frame_idx * self.frame_duration):
                     idx = self.indexed_matrix[frame_idx]
                     rgb = self.lut[idx]
-                    self.img_stim.image = rgb
+                    self.img_stim.setImage(rgb)
                     self.img_stim.draw()
                     self.fixation.update(now=t)
                     self.fixation.draw()

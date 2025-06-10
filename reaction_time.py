@@ -2,11 +2,11 @@ import numpy as np
 
 # ----------- Reaction Time Analysis Helper -----------
 def analyze_reaction_times(
-    switch_log: list[tuple[float, str]],
-    button_events: list[tuple[float, str]],
+    switch_log,
+    button_events,
     min_rt: float = 0.3,
     max_rt: float = 3.0
-) -> tuple[int, int, float, list[float]]:
+):
     """
     Analyze reaction times between color switches and button presses.
     Returns (n_hits, n_switches, mean_rt, reaction_times).
