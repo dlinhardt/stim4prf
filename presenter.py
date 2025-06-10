@@ -1,0 +1,210 @@
+from . import logger
+from .fixation import FixationDot, FixationCross
+from .reaction_time import analyze_reaction_times
+from psychopy import visual, core
+from psychopy.hardware import keyboard
+import pyglet
+import numpy as np
+import os
+from datetime import datetime
+
+# ----------- Main Experiment Presenter -----------
+class PRFStimulusPresenter:
+    """
+    Main class for presenting pRF stimuli using PsychoPy.
+    Handles window creation, stimulus presentation, fixation, and logging.
+    """
+    def __init__(
+        self,
+        loader: StimulusLoader,
+        fixation_type: str = 'dot',
+        screen: int = 0,
+        verbose: bool = False,
+        trigger_key: str = '6',
+        abort_key: str = 'escape',
+        fixation_color_switch_prob: float = 0.01,
+        fixation_cross_size: int = 30,
+        fixation_dot_radius: int = 8,
+        min_switch_interval: float = 2.0,
+        frame_log_interval: int = 100,
+
+        end_screen_wait: float = 2.0
+    ):
+        """
+        Initialize the presenter.
+        """
+        self.verbose = verbose
+        self.trigger_key = trigger_key
+        self.abort_key = abort_key
+        self.frame_log_interval = frame_log_interval
+        self.end_screen_wait = end_screen_wait
+
+        # Mac external display fix: query pixel size with pyglet
+        display = pyglet.canvas.get_display()
+        screens = display.get_screens()
+        if screen >= len(screens):
+            logger.error(f"Screen {screen} not available.")
+            raise RuntimeError(f"Screen {screen} not available")
+        width, height = screens[screen].width, screens[screen].height
+        if self.verbose:
+            logger.info(f"Using screen {screen}: {width}x{height}px")
+
+        # Load only indices and LUT
+        self.indexed_matrix, self.lut, self.frame_duration = loader.load()
+        self.nFrames = self.indexed_matrix.shape[0]
+        self.screen = screen
+
+        # Create PsychoPy window
+        self.win = visual.Window(
+            size=(width, height),
+            units='pix',
+            fullscr=True,
+            screen=self.screen,
+            color=[0,0,0],
+        )
+        # Choose fixation type
+        if fixation_type == 'dot':
+            self.fixation = FixationDot(
+                self.win,
+                radius=fixation_dot_radius,
+                color_switch_prob=fixation_color_switch_prob,
+                min_switch_interval=min_switch_interval,
+                verbose=self.verbose
+            )
+        elif fixation_type == 'cross':
+            self.fixation = FixationCross(
+                self.win,
+                size=fixation_cross_size,
+                color_switch_prob=fixation_color_switch_prob,
+                min_switch_interval=min_switch_interval,
+                verbose=self.verbose
+            )
+        else:
+            logger.error(f"Invalid fixation_type: {fixation_type}")
+            raise ValueError("fixation_type must be 'dot' or 'cross'")
+
+        # Prepare image stimulus
+        h, w = self.indexed_matrix.shape[1:3]
+        dummy_rgb = np.zeros((h, w, 3), dtype=np.float32)
+        self.img_stim = visual.ImageStim(
+            self.win,
+            image=dummy_rgb,
+            units='pix',
+            size=(w, h),
+            colorSpace='rgb'
+        )
+
+    def run(
+        self,
+        subject: str,
+        session: str,
+        run: str,
+        outdir: str,
+        button_keys: list[str] = ['1', '2', '3', '4']
+    ) -> None:
+        """
+        Run the stimulus presentation.
+        Handles trigger wait, stimulus loop, and logging.
+        Logs frame onsets, fixation color changes, and button presses.
+        """
+        import csv
+        timestamp = datetime.now().strftime('%Y%m%dT%H%M%S')
+        log_fname = os.path.join(
+            outdir,
+            f"sub-{subject}_ses-{session}_run-{run}_{timestamp}.tsv"
+        )
+        os.makedirs(outdir, exist_ok=True)
+
+        info_text = visual.TextStim(self.win, text=f"Waiting for scanner...\nPress '{self.trigger_key}' to begin",
+                                   color=[1,1,1], height=30)
+        info_text.draw()
+        self.win.flip()
+        kb = keyboard.Keyboard()
+        kb.clearEvents()
+        core.wait(0.5)
+        if self.verbose:
+            logger.info("Awaiting scanner trigger...")
+
+        try:
+            while True:
+                keys = kb.getKeys(keyList=[self.trigger_key, self.abort_key], waitRelease=False)
+                if keys:
+                    if keys[0].name == self.abort_key:
+                        logger.info("Aborted by user.")
+                        return
+                    elif keys[0].name == self.trigger_key:
+                        break
+                core.wait(0.001)
+            if self.verbose:
+                logger.info("Scanner trigger received, starting presentation.")
+
+            global_clock = core.Clock()
+            frame_onsets = []
+            button_events = []
+            prev_button_state = set()
+            frame_idx = 0
+
+            while frame_idx < self.nFrames:
+                if kb.getKeys(keyList=[self.abort_key], waitRelease=False):
+                    logger.info("Aborted by user.")
+                    return
+
+                t = global_clock.getTime()
+                pressed = kb.getKeys(keyList=button_keys, waitRelease=False, clear=False)
+                for key in pressed:
+                    if key.name not in prev_button_state:
+                        button_events.append((t, key.name))
+                        prev_button_state.add(key.name)
+                current_pressed = set(k.name for k in pressed)
+                prev_button_state = prev_button_state & current_pressed
+
+                if t >= (frame_idx * self.frame_duration):
+                    idx = self.indexed_matrix[frame_idx]
+                    rgb = self.lut[idx]
+                    self.img_stim.image = rgb
+                    self.img_stim.draw()
+                    self.fixation.update(now=t)
+                    self.fixation.draw()
+                    self.win.flip()
+                    frame_onsets.append(t)
+                    frame_idx += 1
+                    if self.verbose and frame_idx % self.frame_log_interval == 0:
+                        logger.info(f"Presented frame {frame_idx}/{self.nFrames}")
+                else:
+                    core.wait(0.001)
+
+            final_text = visual.TextStim(self.win, text="Experiment complete.\nThank you!",
+                                        color=[1,1,1], height=30)
+            final_text.draw()
+            self.win.flip()
+            core.wait(self.end_screen_wait)
+
+            with open(log_fname, 'w', newline='') as f:
+                writer = csv.writer(f, delimiter='\t')
+                writer.writerow(['Event', 'Time', 'Value'])
+                for idx, onset in enumerate(frame_onsets):
+                    writer.writerow(['frame_onset', onset, idx])
+                for t, color in getattr(self.fixation, 'switch_log', []):
+                    writer.writerow(['fixation_color_switch', t, color])
+                for t, key in button_events:
+                    writer.writerow(['button_press', t, key])
+
+                # --- Reaction time analysis ---
+                switch_log = getattr(self.fixation, 'switch_log', [])
+                n_hits, n_switches, mean_rt, _ = analyze_reaction_times(switch_log, button_events)
+                hit_ratio = (n_hits / n_switches * 100) if n_switches > 0 else 0
+
+                result1 = f"[stim4prf][RESULT] {n_hits}/{n_switches} ({hit_ratio:.1f}%) color switches were followed by a button press in 0.3–3s."
+                result2 = f"[stim4prf][RESULT] Mean reaction time: {mean_rt:.3f} s"
+                logger.info(result1)
+                logger.info(result2)
+                writer.writerow(['result', '', result1])
+                writer.writerow(['result', '', result2])
+            if self.verbose:
+                logger.info(f"Saved timing log: {log_fname}")
+        except Exception as e:
+            logger.error(f"Exception during run: {e}")
+            raise
+        finally:
+            if hasattr(self, 'win') and self.win:
+                self.win.close()
