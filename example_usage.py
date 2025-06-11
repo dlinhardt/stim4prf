@@ -1,5 +1,3 @@
-import sys
-sys.path.append('/Users/fmri')
 from stim4prf import (
     MatlabStimulusLoader,
     PRFStimulusPresenter

@@ -1,15 +1,16 @@
 # repo-specific
 bids_logs/*
 logs/*
+stimuli/*
 
 
 # Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
 
 # Mac
-.DS_Store
+**/.DS_Store
 
 # C extensions
 *.so
