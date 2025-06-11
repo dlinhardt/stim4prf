@@ -58,7 +58,7 @@ class MatlabStimulusLoader(StimulusLoader):
             logger.info(f"# frames to present: {len(frames_to_show)}")
             logger.info(f"LUT shape: {lut.shape}, dtype: {lut.dtype}")
 
-        indexed_matrix = images[frames_to_show - 1, ...]
+        indexed_matrix = images[frames_to_show - 1]
 
         lut = self.normalize_lut(lut, self.verbose)
 
@@ -82,7 +82,7 @@ class HDF5StimulusLoader(StimulusLoader):
             logger.info(f"Loading HDF5 stimulus from: {self.h5_path}")
         try:
             with h5py.File(self.h5_path, 'r') as f:
-                images = np.array(f['stimulus']['images'])
+                images = np.array(f['stimulus']['images']).T
                 frames_to_show = np.array(f['stimulus']['seq']).astype(int).ravel()
                 lut = np.array(f['stimulus']['cmap'])
                 params = dict(f['params'].attrs)
@@ -98,7 +98,7 @@ class HDF5StimulusLoader(StimulusLoader):
             logger.info(f"# frames to present: {len(frames_to_show)}")
             logger.info(f"LUT shape: {lut.shape}, dtype: {lut.dtype}")
 
-        indexed_matrix = images[..., frames_to_show - 1]
+        indexed_matrix = images[frames_to_show]
 
         lut = self.normalize_lut(lut, self.verbose)
 
