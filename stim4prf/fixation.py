@@ -1,6 +1,6 @@
 import random
 from abc import ABC, abstractmethod
-from .. import logger
+from stim4prf import logger
 from psychopy import visual
 
 # ----------- Fixation Base and Variants -----------

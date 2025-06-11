@@ -1,4 +1,4 @@
-from .. import logger
+from stim4prf import logger
 from .fixation import FixationDot, FixationCross
 from .reaction_time import analyze_reaction_times
 from psychopy import visual, core

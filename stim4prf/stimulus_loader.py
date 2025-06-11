@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from scipy.io import loadmat
 import numpy as np
 import h5py
-from .. import logger
+from stim4prf import logger
 
 # ----------- Stimulus Loader Abstract Base -----------
 class StimulusLoader(ABC):
@@ -58,7 +58,7 @@ class MatlabStimulusLoader(StimulusLoader):
             logger.info(f"# frames to present: {len(frames_to_show)}")
             logger.info(f"LUT shape: {lut.shape}, dtype: {lut.dtype}")
 
-        indexed_matrix = images[frames_to_show - 1]
+        indexed_matrix = images[frames_to_show - 1, ...]
 
         lut = self.normalize_lut(lut, self.verbose)
 
@@ -82,9 +82,9 @@ class HDF5StimulusLoader(StimulusLoader):
             logger.info(f"Loading HDF5 stimulus from: {self.h5_path}")
         try:
             with h5py.File(self.h5_path, 'r') as f:
-                images = np.array(f['images'])
-                frames_to_show = np.array(f['seq']).astype(int).ravel()
-                lut = np.array(f['cmap'])
+                images = np.array(f['stimulus']['images'])
+                frames_to_show = np.array(f['stimulus']['seq']).astype(int).ravel()
+                lut = np.array(f['stimulus']['cmap'])
                 params = dict(f['params'].attrs)
         except FileNotFoundError:
             logger.error(f"Could not find file: {self.h5_path}")
@@ -98,7 +98,7 @@ class HDF5StimulusLoader(StimulusLoader):
             logger.info(f"# frames to present: {len(frames_to_show)}")
             logger.info(f"LUT shape: {lut.shape}, dtype: {lut.dtype}")
 
-        indexed_matrix = images[frames_to_show]
+        indexed_matrix = images[..., frames_to_show - 1]
 
         lut = self.normalize_lut(lut, self.verbose)
 
