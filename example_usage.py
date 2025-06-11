@@ -4,9 +4,10 @@ from stim4prf import (
     MatlabStimulusLoader,
     PRFStimulusPresenter
 )
+import os
 
 if __name__ == "__main__":
-    loader = MatlabStimulusLoader('./bar_smooth_test_stimulus.mat', verbose=False)
+    loader = MatlabStimulusLoader(os.path.join('.', 'bar_smooth_test_stimulus.mat'), verbose=False)
     presenter = PRFStimulusPresenter(
         loader,
         fixation_type='dot',
@@ -21,7 +22,7 @@ if __name__ == "__main__":
         frame_log_interval=100,
         end_screen_wait=2.0
     )
-    presenter.run(subject='01', session='01', run='01', outdir='./bids_logs')
+    presenter.run(subject='01', session='01', run='01', outdir=os.path.join('.', 'bids_logs'))
 
 # # For Python/NumPy (where you have an indexed_matrix and lut already loaded):
 # # loader = PythonStimulusLoader(indexed_matrix, lut, frame_duration=0.125)
