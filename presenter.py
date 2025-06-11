@@ -3,10 +3,25 @@ from .fixation import FixationDot, FixationCross
 from .reaction_time import analyze_reaction_times
 from psychopy import visual, core
 from psychopy.hardware import keyboard
-import pyglet
 import numpy as np
 import os
 from datetime import datetime
+
+def get_screen_size(screen: int):
+    """Return (width, height) for the requested screen. Fall back to primary if unavailable."""
+    try:
+        import pyglet
+        display = pyglet.canvas.get_display()
+        screens = display.get_screens()
+        if screen < len(screens):
+            return screens[screen].width, screens[screen].height
+        else:
+            logger.warning(f"Requested screen {screen} not available. Falling back to primary screen (0).")
+            return screens[0].width, screens[0].height
+    except Exception as e:
+        logger.warning(f"Could not query screens ({e}). Using default PsychoPy screen size.")
+        # Use PsychoPy default; usually fills the screen for fullscr=True
+        return None, None
 
 # ----------- Main Experiment Presenter -----------
 class PRFStimulusPresenter:
@@ -39,30 +54,25 @@ class PRFStimulusPresenter:
         self.frame_log_interval = frame_log_interval
         self.end_screen_wait = end_screen_wait
 
-        # Mac external display fix: query pixel size with pyglet
-        display = pyglet.canvas.get_display()
-        screens = display.get_screens()
-        if screen >= len(screens):
-            logger.error(f"Screen {screen} not available.")
-            raise RuntimeError(f"Screen {screen} not available")
-        width, height = screens[screen].width, screens[screen].height
-        if self.verbose:
-            logger.info(f"Using screen {screen}: {width}x{height}px")
+        # Cross-platform screen size handling
+        width, height = get_screen_size(screen)
+        window_kwargs = dict(
+            fullscr=True,
+            screen=screen,
+            units='pix',
+            colorSpace='rgb1',
+            color=[0.5,0.5,0.5],
+        )
+        if width is not None and height is not None:
+            window_kwargs['size'] = (width, height)
+
+        self.win = visual.Window(**window_kwargs)
 
         # Load only indices and LUT
         self.indexed_matrix, self.lut, self.frame_duration = loader.load()
         self.nFrames = self.indexed_matrix.shape[0]
         self.screen = screen
 
-        # Create PsychoPy window
-        self.win = visual.Window(
-            size=(width, height),
-            units='pix',
-            fullscr=True,
-            screen=self.screen,
-            colorSpace='rgb1',
-            color=[0.5,0.5,0.5],
-        )
         # Choose fixation type
         if fixation_type == 'dot':
             self.fixation = FixationDot(
