@@ -1,5 +1,5 @@
 from stim4prf import logger
-from .fixation import FixationDot, FixationCross
+from .fixation import FixationDot, FixationCross, ABCTargetFixation
 from .reaction_time import analyze_reaction_times
 from psychopy import visual, core
 from psychopy.hardware import keyboard
@@ -90,9 +90,13 @@ class PRFStimulusPresenter:
                 min_switch_interval=min_switch_interval,
                 verbose=self.verbose
             )
+        elif fixation_type == 'abc':
+            self.fixation = ABCTargetFixation(
+                self.win,
+            )
         else:
             logger.error(f"Invalid fixation_type: {fixation_type}")
-            raise ValueError("fixation_type must be 'dot' or 'cross'")
+            raise ValueError("fixation_type must be 'dot', 'cross', or 'abc'")
 
         # Prepare image stimulus
         h, w = self.indexed_matrix.shape[1:3]

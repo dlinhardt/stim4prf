@@ -6,15 +6,15 @@ from stim4prf import (
 import os
 
 # For legacy MATLAB files:
-loader = MatlabStimulusLoader(os.path.join('stimuli', 'bar_smooth_test_stimulus.mat'), verbose=False)
+# loader = MatlabStimulusLoader(os.path.join('stimuli', 'bar_smooth_test_stimulus.mat'), verbose=False)
 
 # For the new HDF5 files:
-# loader = HDF5StimulusLoader(os.path.join('stimuli', 'bar_smooth_size-1080_dur-300_ecc-10.6_width-2_tr1_images.h5'), verbose=False)
+loader = HDF5StimulusLoader(os.path.join('.', 'stimuli', 'bar_smooth_size-1080_dur-300_ecc-10.6_width-2_tr1_images.h5'), verbose=False)
 
 # Create the stimulus presenter with the desired parameters
 presenter = PRFStimulusPresenter(
     loader,
-    fixation_type='dot',
+    fixation_type='cross',
     screen=1,
     verbose=True,
     trigger_key='6',
