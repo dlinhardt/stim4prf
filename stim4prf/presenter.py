@@ -3,9 +3,9 @@ from .fixation import FixationDot, FixationCross, ABCTargetFixation
 from .reaction_time import analyze_reaction_times
 from psychopy import visual, core
 from psychopy.hardware import keyboard
+from datetime import datetime
 import numpy as np
 import os
-from datetime import datetime
 
 def get_screen_size(screen: int):
     """Return (width, height) for the requested screen. Fall back to primary if unavailable."""
@@ -158,6 +158,7 @@ class PRFStimulusPresenter:
             button_events = []
             prev_button_state = set()
             frame_idx = 0
+            scan_trigger_times = []
 
             while frame_idx < self.nFrames:
                 if kb.getKeys(keyList=[self.abort_key], waitRelease=False):
@@ -165,13 +166,17 @@ class PRFStimulusPresenter:
                     return
 
                 t = global_clock.getTime()
+
+                # log the scanner trigger
+                if kb.getKeys(keyList=[self.trigger_key], waitRelease=False):
+                    scan_trigger_times.append(t)
+
+                # log the button presses
                 pressed = kb.getKeys(keyList=button_keys, waitRelease=False, clear=False)
                 for key in pressed:
                     if key.name not in prev_button_state:
                         button_events.append((t, key.name))
-                        prev_button_state.add(key.name)
-                current_pressed = set(k.name for k in pressed)
-                prev_button_state = prev_button_state & current_pressed
+                prev_button_state = set(k.name for k in pressed)
 
                 if t >= (frame_idx * self.frame_duration):
                     idx = self.indexed_matrix[frame_idx]
@@ -194,23 +199,37 @@ class PRFStimulusPresenter:
             self.win.flip()
             core.wait(self.end_screen_wait)
 
+            # Collect all events in a single list
+            all_events = []
+
+            for idx, onset in enumerate(frame_onsets):
+                all_events.append((onset, 'frame_onset', idx))
+
+            for t, color in getattr(self.fixation, 'switch_log', []):
+                all_events.append((t, 'fixation_color_switch', color))
+
+            for t, key in button_events:
+                all_events.append((t, 'button_press', key))
+
+            for t in scan_trigger_times:
+                all_events.append((t, 'scanner_trigger', f'button {self.trigger_key}'))
+
+            # Sort all events by their timestamp
+            all_events.sort(key=lambda x: x[0])
+
             with open(log_fname, 'w', newline='') as f:
                 writer = csv.writer(f, delimiter='\t')
-                writer.writerow(['Event', 'Time', 'Value'])
-                for idx, onset in enumerate(frame_onsets):
-                    writer.writerow(['frame_onset', onset, idx])
-                for t, color in getattr(self.fixation, 'switch_log', []):
-                    writer.writerow(['fixation_color_switch', t, color])
-                for t, key in button_events:
-                    writer.writerow(['button_press', t, key])
+                writer.writerow(['Time', 'Event', 'Value'])
+                for event in all_events:
+                    writer.writerow(event)
 
                 # --- Reaction time analysis ---
                 switch_log = getattr(self.fixation, 'switch_log', [])
                 n_hits, n_switches, mean_rt, _ = analyze_reaction_times(switch_log, button_events)
                 hit_ratio = (n_hits / n_switches * 100) if n_switches > 0 else 0
 
-                result1 = f"[stim4prf][RESULT] {n_hits}/{n_switches} ({hit_ratio:.1f}%) color switches were followed by a button press in 0.3–3s."
-                result2 = f"[stim4prf][RESULT] Mean reaction time: {mean_rt:.3f} s"
+                result1 = f"[RESULT] {n_hits}/{n_switches} ({hit_ratio:.1f}%) color switches were followed by a button press in 0.3–3s."
+                result2 = f"[RESULT] Mean reaction time: {mean_rt:.3f} s"
                 logger.info(result1)
                 logger.info(result2)
                 writer.writerow(['result', '', result1])
