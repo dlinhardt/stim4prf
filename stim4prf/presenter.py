@@ -47,8 +47,7 @@ class PRFStimulusPresenter:
         fixation_dot_radius: int = 8,
         min_switch_interval: float = 2.0,
         frame_log_interval: int = 100,
-        end_screen_wait: float = 2.0,
-        **window_kwargs
+        end_screen_wait: float = 2.0
     ):
         """
         Initialize the presenter.
@@ -64,11 +63,17 @@ class PRFStimulusPresenter:
 
         # Cross-platform screen size handling
         width, height = get_screen_size(screen)
+        window_kwargs = dict(
+            fullscr=True,
+            screen=screen,
+            units='pix',
+            colorSpace='rgb1',
+            color=[0.5,0.5,0.5],
+        )
         if width is not None and height is not None:
-            self.window_kwargs['size'] = (width, height)
+            window_kwargs['size'] = (width, height)
 
-        # Create PsychoPy window
-        self.win = visual.Window(screen=self.screen, **self.window_kwargs)
+        self.win = visual.Window(**window_kwargs)
 
         # Load only indices and LUT
         self.indexed_matrix, self.lut, self.frame_duration = loader.load()
