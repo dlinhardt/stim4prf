@@ -3,6 +3,8 @@ from stim4prf import (
     HDF5StimulusLoader,
     PRFStimulusPresenter
 )
+from stim4prf.eyetracking import EyeLinkTracker
+from stim4prf.fixation import FixationDot
 import os
 
 # For legacy MATLAB files:
@@ -14,17 +16,24 @@ loader = HDF5StimulusLoader(os.path.join('.', 'stimuli', 'bar_smooth_size-1080_d
 # Create the stimulus presenter with the desired parameters
 presenter = PRFStimulusPresenter(
     loader,
-    fixation_type='cross',
+    fixation_class=FixationDot,
+    fixation_kwargs={
+        'radius': 8,
+        'color_switch_prob': 0.01,
+        'min_switch_interval': 2.0,
+        'verbose': True
+    },
     screen=1,
     verbose=True,
     trigger_key='6',
     abort_key='escape',
-    fixation_color_switch_prob=0.01,
-    fixation_cross_size=30,
-    fixation_dot_radius=8,
-    min_switch_interval=2.0,
-    frame_log_interval=100,
-    end_screen_wait=2.0
+    end_screen_wait=2.0,
+    eyetracker_class=EyeLinkTracker,
+    eyetracker_kwargs={
+        'edf_file': 'mysubj.edf',
+        'session_folder': 'results/session1',
+        'dummy_mode': False
+    }
 )
 
 # Run the presenter with specified subject, session, and run identifiers
