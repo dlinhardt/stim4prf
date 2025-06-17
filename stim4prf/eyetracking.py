@@ -14,6 +14,7 @@ from stim4prf import logger
 from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 
 
+# ----------- Eyetracker Base -----------
 class EyeTrackerBase(ABC):
     @abstractmethod
     def calibrate(self, win):
@@ -44,6 +45,7 @@ class EyeTrackerBase(ABC):
         pass
 
 
+# ----------- EyeLink Tracker Implementation -----------
 class EyeLinkTracker(EyeTrackerBase):
     """
     EyeLink tracker integration for PsychoPy.
@@ -51,10 +53,8 @@ class EyeLinkTracker(EyeTrackerBase):
     """
 
     def __init__(self, outdir, dummy_mode=False):
-
         self.outdir = outdir
         os.makedirs(outdir, exist_ok=True)
-
         self.dummy_mode = dummy_mode
         self.el_tracker = None
 
@@ -74,28 +74,23 @@ class EyeLinkTracker(EyeTrackerBase):
         timestamp = datetime.now().strftime("T%H%M%S")
         self.edf_file = timestamp + ".edf"
         self.el_tracker.openDataFile(self.edf_file)
-        # Set up tracker parameters (can be expanded as needed)
         self.el_tracker.setOfflineMode()
         self.el_tracker.sendCommand("calibration_type = HV13")
 
     def calibrate(self, win):
-        # connect with window
         self.win = win
         self.scn_width, self.scn_height = self.win.size
-        # send coordinates to the tracker
         el_coords = (
             f"screen_pixel_coords = 0 0 {self.scn_width - 1} {self.scn_height - 1}"
         )
         self.el_tracker.sendCommand(el_coords)
         dv_coords = f"DISPLAY_COORDS  0 0 {self.scn_width - 1} {self.scn_height - 1}"
         self.el_tracker.sendMessage(dv_coords)
-        # Set up graphics environment for calibration
         genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
         genv.setTargetType("circle")
         genv.setCalibrationSounds("", "", "")
         pylink.openGraphicsEx(genv)
 
-        # Run calibration
         if not self.dummy_mode:
             et_calib_msg = (
                 "Press ENTER to calibrate tracker or ESC to jump to drift correction!"
@@ -110,7 +105,6 @@ class EyeLinkTracker(EyeTrackerBase):
                 self.el_tracker.exitCalibration()
 
     def drift_correction(self):
-        # Center of the screen
         self.el_tracker.doDriftCorrect(
             int(self.scn_width / 2), int(self.scn_height / 2), 1, 1
         )
@@ -128,7 +122,6 @@ class EyeLinkTracker(EyeTrackerBase):
         self.el_tracker.sendMessage(msg)
 
     def download_data(self, fname):
-        # Download EDF file from Host PC to local session folder
         local_edf = os.path.join(self.outdir, fname.replace(".tsv", ".edf"))
         self.el_tracker.setOfflineMode()
         self.el_tracker.sendCommand("clear_screen 0")
@@ -149,6 +142,5 @@ class EyeLinkTracker(EyeTrackerBase):
         """
         pass
         filename = os.path.join(self.outdir, fname.replace(".tsv", ".h5"))
-
         with h5py.File(filename, "w") as f:
             pass

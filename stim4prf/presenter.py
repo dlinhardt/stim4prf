@@ -14,7 +14,10 @@ from .reaction_time import analyze_reaction_times
 
 
 def get_screen_size(screen: int):
-    """Return (width, height) for the requested screen. Fall back to primary if unavailable."""
+    """
+    Return (width, height) for the requested screen.
+    Falls back to primary if unavailable.
+    """
     try:
         import pyglet
 
@@ -61,36 +64,41 @@ class PRFStimulusPresenter:
         end_screen_wait: float = 2.0,
     ):
         """
-        Initialize the presenter.
+        Initialize the presenter and load stimulus.
         """
         self.loader = loader
+        self.fixation_class = fixation_class
+        self.fixation_kwargs = fixation_kwargs or {}
+        self.eyetracker_class = eyetracker_class
+        self.eyetracker_kwargs = eyetracker_kwargs or {}
+        self.screen = screen
         self.verbose = verbose
         self.trigger_key = trigger_key
         self.abort_key = abort_key
         self.frame_log_interval = frame_log_interval
         self.end_screen_wait = end_screen_wait
-        self.screen = screen
 
-        # Eyetracker instantiation
-        try:
-            self.eyetracker = None
-            if eyetracker_class is not None:
-                logger.info("Initializing eyetracker...")
-                if eyetracker_kwargs is None:
-                    eyetracker_kwargs = {}
-                self.eyetracker = eyetracker_class(
-                    outdir=os.path.join(".", "eyetracker"), **eyetracker_kwargs
-                )
-        except Exception as e:
-            logger.error(f"Exception during eyetracker initialization: {e}")
-            raise
+        # Load the stimulus
+        self.indexed_matrix, self.lut, self.frame_duration = self.loader.load()
+        self.nFrames = self.indexed_matrix.shape[0]
 
-        # Cross-platform screen size handling
-        logger.info("Starting Screen...")
-        width, height = get_screen_size(screen)
+        # Initialize Eyetracker
+        self.eyetracker = None
+        if self.eyetracker_class is not None:
+            self.eyetracker = self.eyetracker_class(
+                outdir=os.path.join(".", "eyetracker"), **self.eyetracker_kwargs
+            )
+
+    def _setup_run(self):
+        """
+        Set up PsychoPy window, fixation, and image stimulus for each run.
+        """
+
+        # Initialize window
+        width, height = get_screen_size(self.screen)
         window_kwargs = dict(
             fullscr=True,
-            screen=screen,
+            screen=self.screen,
             units="pix",
             colorSpace="rgb1",
             color=[0.5, 0.5, 0.5],
@@ -98,24 +106,20 @@ class PRFStimulusPresenter:
         )
         if width is not None and height is not None:
             window_kwargs["size"] = (width, height)
-
         self.win = visual.Window(**window_kwargs)
 
-        # Load only indices and LUT
-        self.indexed_matrix, self.lut, self.frame_duration = loader.load()
-        self.nFrames = self.indexed_matrix.shape[0]
+        # Initialize fixation
+        self.fixation = self.fixation_class(self.win, **self.fixation_kwargs)
 
-        # Choose fixation type
-        logger.info("Initializing Fixation...")
-        if fixation_kwargs is None:
-            fixation_kwargs = {}
-        self.fixation = fixation_class(self.win, **fixation_kwargs)
-
-        # Prepare image stimulus
+        # Initialize image stimulus
         h, w = self.indexed_matrix.shape[1:3]
         dummy_rgb = np.zeros((h, w, 3), dtype=np.float32)
         self.img_stim = visual.ImageStim(
-            self.win, image=dummy_rgb, units="pix", size=(w, h), colorSpace="rgb1"
+            self.win,
+            image=dummy_rgb,
+            units="pix",
+            size=(w, h),
+            colorSpace="rgb1",
         )
 
     def run(
@@ -124,19 +128,24 @@ class PRFStimulusPresenter:
         session: str,
         run: str,
         outdir: str,
-        button_keys=["1", "2", "3", "4"],
+        button_keys=None,
     ) -> None:
         """
         Run the stimulus presentation.
         Handles trigger wait, stimulus loop, and logging.
         Logs frame onsets, fixation color changes, and button presses.
         """
+        if button_keys is None:
+            button_keys = ["1", "2", "3", "4"]
+
+        self._setup_run()
+
         timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         log_fname = f"sub-{subject}_ses-{session}_run-{run}_{timestamp}.tsv"
         log_fpath = os.path.join(outdir, log_fname)
         os.makedirs(outdir, exist_ok=True)
 
-        # --- EYETRACKER SETUP ---
+        # --- Eyetracker setup ---
         if self.eyetracker:
             if self.verbose:
                 logger.info("Starting eyetracker calibration...")
@@ -146,7 +155,7 @@ class PRFStimulusPresenter:
             self.eyetracker.start_recording()
             self.eyetracker.send_message(f"EXPERIMENT_START {subject} {session} {run}")
 
-        # print the start stimulus text
+        # --- Show start screen and wait for scanner trigger ---
         info_text = visual.TextStim(
             self.win,
             text=f"Waiting for scanner...\nPress '{self.trigger_key}' to begin",
@@ -161,8 +170,10 @@ class PRFStimulusPresenter:
         if self.verbose:
             logger.info("Awaiting scanner trigger...")
 
+        all_events = []  # Collect all events for logging
+
         try:
-            # --- Wait for scanner trigger, then mark stimulus onset ---
+            # --- Wait for scanner trigger or abort key ---
             while True:
                 keys = kb.getKeys(
                     keyList=[self.trigger_key, self.abort_key], waitRelease=False
@@ -184,26 +195,26 @@ class PRFStimulusPresenter:
             frame_idx = 0
             scan_trigger_times = []
 
-            # --- Wait for trigger, then ---
+            # --- Mark stimulus onset for eyetracker ---
             if self.eyetracker:
                 self.eyetracker.send_message("stimulus_onset")
 
-            # --- Main stimulus loop ---
+            # --- Main stimulus presentation loop ---
             while frame_idx < self.nFrames:
+                # --- Check for abort key ---
                 if kb.getKeys(keyList=[self.abort_key], waitRelease=False):
                     logger.info("Aborted by user.")
                     return
 
                 t = global_clock.getTime()
 
-                # log the scanner trigger
+                # --- Log scanner trigger key presses ---
                 if kb.getKeys(keyList=[self.trigger_key], waitRelease=False):
                     scan_trigger_times.append(t)
-
                     if self.eyetracker:
                         self.eyetracker.send_message("scanner_trigger")
 
-                # log the button presses
+                # --- Log button presses ---
                 pressed = kb.getKeys(
                     keyList=button_keys, waitRelease=False, clear=False
                 )
@@ -212,6 +223,7 @@ class PRFStimulusPresenter:
                         button_events.append((t, key.name))
                 prev_button_state = set(k.name for k in pressed)
 
+                # --- Present next stimulus frame if time ---
                 if t >= (frame_idx * self.frame_duration):
                     idx = self.indexed_matrix[frame_idx]
                     rgb = self.lut[idx]
@@ -227,6 +239,7 @@ class PRFStimulusPresenter:
                 else:
                     core.wait(0.001)
 
+            # --- Show end screen ---
             final_text = visual.TextStim(
                 self.win,
                 text="Experiment complete.\nThank you!",
@@ -237,25 +250,18 @@ class PRFStimulusPresenter:
             self.win.flip()
             core.wait(self.end_screen_wait)
 
-            # Collect all events in a single list
-            all_events = []
-
+            # --- Collect all events for logging ---
             for idx, onset in enumerate(frame_onsets):
                 all_events.append((onset, "frame_onset", idx))
-
             for t, color in getattr(self.fixation, "switch_log", []):
                 all_events.append((t, "fixation_color_switch", color))
-
             for t, key in button_events:
                 all_events.append((t, "button_press", key))
-
             for t in scan_trigger_times:
                 all_events.append((t, "scanner_trigger", f"button {self.trigger_key}"))
-
-            # Sort all events by their timestamp
             all_events.sort(key=lambda x: x[0])
 
-            # Save behavioral log
+            # --- Save behavioral log ---
             with open(log_fpath, "w", newline="") as f:
                 writer = csv.writer(f, delimiter="\t")
                 writer.writerow(["Time", "Event", "Value"])
@@ -277,14 +283,15 @@ class PRFStimulusPresenter:
                 writer.writerow(["result", "", result2])
             if self.verbose:
                 logger.info(f"Saved timing log: {log_fpath}")
+
         except Exception as e:
             logger.error(f"Exception during run: {e}")
             raise
         finally:
+            # --- Cleanup: close window and eyetracker ---
             if hasattr(self, "win") and self.win:
                 self.win.close()
-
-            if self.eyetracker and all_events:
+            if self.eyetracker:
                 self.eyetracker.send_message("stimulus_end")
                 self.eyetracker.stop_recording()
                 self.eyetracker.download_data(log_fname)

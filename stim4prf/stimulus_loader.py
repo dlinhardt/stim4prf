@@ -65,9 +65,7 @@ class MatlabStimulusLoader(StimulusLoader):
             logger.info(f"LUT shape: {lut.shape}, dtype: {lut.dtype}")
 
         indexed_matrix = images[frames_to_show - 1]
-
         lut = self.normalize_lut(lut, self.verbose)
-
         frame_duration = stimulus["stimulus"]["seqtiming"].ravel()[0][1]
 
         if self.verbose:
@@ -107,9 +105,7 @@ class HDF5StimulusLoader(StimulusLoader):
             logger.info(f"LUT shape: {lut.shape}, dtype: {lut.dtype}")
 
         indexed_matrix = images[frames_to_show]
-
         lut = self.normalize_lut(lut, self.verbose)
-
         frame_duration = 1 / params["tempFreq"]
 
         if self.verbose:
