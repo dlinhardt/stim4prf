@@ -20,8 +20,7 @@ presenter = PRFStimulusPresenter(
     fixation_kwargs={
         'radius': 8,
         'color_switch_prob': 0.01,
-        'min_switch_interval': 2.0,
-        'verbose': True
+        'min_switch_interval': 2.0
     },
     screen=1,
     verbose=True,
@@ -33,7 +32,7 @@ presenter = PRFStimulusPresenter(
         'edf_file': 'mysubj.edf',
         'session_folder': 'results/session1',
         'dummy_mode': False
-    }
+    },
 )
 
 # Run the presenter with specified subject, session, and run identifiers

@@ -42,13 +42,8 @@ class PRFStimulusPresenter:
         verbose: bool = False,
         trigger_key: str = '6',
         abort_key: str = 'escape',
-        fixation_color_switch_prob: float = 0.01,
-        fixation_cross_size: int = 30,
-        fixation_dot_radius: int = 8,
-        min_switch_interval: float = 2.0,
         frame_log_interval: int = 100,
-        end_screen_wait: float = 2.0,
-        **window_kwargs
+        end_screen_wait: float = 2.0
     ):
         """
         Initialize the presenter.
@@ -60,15 +55,29 @@ class PRFStimulusPresenter:
         self.frame_log_interval = frame_log_interval
         self.end_screen_wait = end_screen_wait
         self.screen = screen
-        self.window_kwargs = window_kwargs
+        
+        # Eyetracker instantiation (after window is created)
+        self.eyetracker = None
+        if eyetracker_class is not None:
+            print('starting eyetracker')
+            if eyetracker_kwargs is None:
+                eyetracker_kwargs = {}
+            self.eyetracker = eyetracker_class(**eyetracker_kwargs)
 
         # Cross-platform screen size handling
         width, height = get_screen_size(screen)
+        window_kwargs = dict(
+            fullscr=True,
+            screen=self.screen,
+            units='pix',
+            colorSpace='rgb1',
+            color=[0.5,0.5,0.5],
+        )
         if width is not None and height is not None:
-            self.window_kwargs['size'] = (width, height)
-
+            window_kwargs['size'] = (width, height)
+            
         # Create PsychoPy window
-        self.win = visual.Window(screen=self.screen, **self.window_kwargs)
+        self.win = visual.Window(**window_kwargs)
 
         # Load only indices and LUT
         self.indexed_matrix, self.lut, self.frame_duration = loader.load()
@@ -89,13 +98,6 @@ class PRFStimulusPresenter:
             size=(w, h),
             colorSpace='rgb1'
         )
-
-        # Eyetracker instantiation (after window is created)
-        self.eyetracker = None
-        if eyetracker_class is not None:
-            if eyetracker_kwargs is None:
-                eyetracker_kwargs = {}
-            self.eyetracker = eyetracker_class(win=self.win, **eyetracker_kwargs)
 
     def run(
         self,

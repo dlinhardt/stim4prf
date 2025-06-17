@@ -3,7 +3,7 @@ import pylink
 import os
 import platform
 from abc import ABC, abstractmethod
-from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
+from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 import h5py
 import numpy as np
 
@@ -41,8 +41,7 @@ class EyeLinkTracker(EyeTrackerBase):
     EyeLink tracker integration for PsychoPy.
     Handles calibration, drift correction, recording, event marking, and EDF download.
     """
-    def __init__(self, win, edf_file, session_folder, dummy_mode=False):
-        self.win = win
+    def __init__(self, edf_file, session_folder, dummy_mode=False):
         self.edf_file = edf_file
         self.session_folder = session_folder
         self.dummy_mode = dummy_mode
@@ -63,7 +62,8 @@ class EyeLinkTracker(EyeTrackerBase):
         dv_coords = f"DISPLAY_COORDS  0 0 {self.scn_width - 1} {self.scn_height - 1}"
         self.el_tracker.sendMessage(dv_coords)
 
-    def calibrate(self):
+    def calibrate(self, win):
+        self.win = win
         # Set up graphics environment for calibration
         genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
         foreground_color = (-1, -1, -1)

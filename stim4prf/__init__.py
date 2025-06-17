@@ -10,3 +10,4 @@ from .stimulus_loader import StimulusLoader, MatlabStimulusLoader, HDF5StimulusL
 from .fixation import Fixation, FixationDot, FixationCross
 from .reaction_time import analyze_reaction_times
 from .presenter import PRFStimulusPresenter
+from .eyetracking import EyeLinkTracker
