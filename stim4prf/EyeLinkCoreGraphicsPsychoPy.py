@@ -34,7 +34,7 @@ from psychopy.sound import Sound
 
 #allow to disable sound, or if we failed to initialize pygame.mixer or failed to load audio file
 #continue experiment without sound.
-DISABLE_AUDIO=False
+DISABLE_AUDIO=True
 
 
 # Show only critical log message in the console
@@ -730,8 +730,10 @@ def main():
     win = visual.Window((scn_w, scn_h),
                         fullscr=True,
                         monitor=mon,
+                        screen=1,
                         winType='pyglet',
-                        units='pix')
+                        units='pix',
+                        checkTiming=False)
 
     # Send over a command to let the tracker know the correct screen resolution
     scn_coords = "screen_pixel_coords = 0 0 %d %d" % (scn_w - 1, scn_h - 1)
@@ -742,7 +744,7 @@ def main():
 
     # Set background and foreground colors for calibration
     foreground_color = (-1, -1, -1)
-    background_color = win.color
+    background_color = (0, 0, 0)#win.color
     genv.setCalibrationColors(foreground_color, background_color)
 
     # The target could be a "circle" (default), a "picture", a "movie" clip,

@@ -2,7 +2,7 @@
 bids_logs/*
 logs/*
 stimuli/*
-
+eyetracker/*
 
 # Byte-compiled / optimized / DLL files
 **/__pycache__/

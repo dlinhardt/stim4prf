@@ -29,8 +29,6 @@ presenter = PRFStimulusPresenter(
     end_screen_wait=2.0,
     eyetracker_class=EyeLinkTracker,
     eyetracker_kwargs={
-        'edf_file': 'mysubj.edf',
-        'session_folder': 'results/session1',
         'dummy_mode': False
     },
 )

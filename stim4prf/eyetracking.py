@@ -3,9 +3,11 @@ import pylink
 import os
 import platform
 from abc import ABC, abstractmethod
-from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 import h5py
 import numpy as np
+from datetime import datetime
+from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
+from psychopy import visual, event
 
 class EyeTrackerBase(ABC):
     @abstractmethod
@@ -41,41 +43,59 @@ class EyeLinkTracker(EyeTrackerBase):
     EyeLink tracker integration for PsychoPy.
     Handles calibration, drift correction, recording, event marking, and EDF download.
     """
-    def __init__(self, edf_file, session_folder, dummy_mode=False):
-        self.edf_file = edf_file
-        self.session_folder = session_folder
+    def __init__(self, outdir, dummy_mode=False):
+
+        self.outdir = outdir
+        os.makedirs(outdir, exist_ok=True)
+        
         self.dummy_mode = dummy_mode
         self.el_tracker = None
-        self.scn_width, self.scn_height = win.size
-
+        
     def connect(self):
         if self.dummy_mode:
             self.el_tracker = pylink.EyeLink(None)
         else:
-            self.el_tracker = pylink.EyeLink("100.1.1.1")
+            try:
+                self.el_tracker = pylink.EyeLink("100.1.1.1")
+            except:
+                logger.error('Could not connect to eyetracker!')
+                self.win.close()
+                raise
+            
+        timestamp = datetime.now().strftime('T%H%M%S')
+        self.edf_file = timestamp+'.edf'
         self.el_tracker.openDataFile(self.edf_file)
         # Set up tracker parameters (can be expanded as needed)
         self.el_tracker.setOfflineMode()
         self.el_tracker.sendCommand("calibration_type = HV13")
+
+    def calibrate(self, win):
+        # connect with window
+        self.win = win
+        self.scn_width, self.scn_height = self.win.size
+        # send coordinates to the tracker
         el_coords = f"screen_pixel_coords = 0 0 {self.scn_width - 1} {self.scn_height - 1}"
         self.el_tracker.sendCommand(el_coords)
         dv_coords = f"DISPLAY_COORDS  0 0 {self.scn_width - 1} {self.scn_height - 1}"
         self.el_tracker.sendMessage(dv_coords)
-
-    def calibrate(self, win):
-        self.win = win
-        # Set up graphics environment for calibration
+        # Set up graphics environment for calibration 
         genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
-        foreground_color = (-1, -1, -1)
-        background_color = self.win.color
-        genv.setCalibrationColors(foreground_color, background_color)
         genv.setTargetType('circle')
         genv.setCalibrationSounds('', '', '')
-        if 'Darwin' in platform.system():
-            genv.fixMacRetinaDisplay()
         pylink.openGraphicsEx(genv)
+        print('check pre-doTrackerSetup')
+        print(self.dummy_mode)
         # Run calibration
-        self.el_tracker.doTrackerSetup()
+        if not self.dummy_mode:
+            et_calib_msg = "Press ENTER to calibrate tracker or ESC to jump to drift correction!"
+            msg = visual.TextStim(self.win, et_calib_msg, color=[1,1,1], height=30)
+            msg.draw()
+            self.win.flip()
+            try:
+                self.el_tracker.doTrackerSetup()
+            except RuntimeError as err:
+                logger.error(err)
+                el_tracker.exitCalibration()
 
     def drift_correction(self):
         # Center of the screen
@@ -97,45 +117,36 @@ class EyeLinkTracker(EyeTrackerBase):
     def send_message(self, msg):
         self.el_tracker.sendMessage(msg)
 
-    def download_data(self):
+    def download_data(self, fname):
         # Download EDF file from Host PC to local session folder
-        local_edf = os.path.join(self.session_folder, self.edf_file)
+        timestamp = datetime.now().strftime('%Y%m%dT%H%M%S')
+        local_edf = os.path.join(
+            self.outdir,
+            fname.replace('.tsv', '.edf')
+        )
+        self.el_tracker.setOfflineMode()
+        self.el_tracker.sendCommand("clear_screen 0")
+        pylink.msecDelay(500)
         self.el_tracker.closeDataFile()
-        self.el_tracker.receiveDataFile(self.edf_file, local_edf)
+        try:
+            self.el_tracker.receiveDataFile(self.edf_file, local_edf)
+        except RuntimeError as err:
+            logger.error(err)
         self.el_tracker.close()
 
     def save_hdf5(
         self,
-        filename,
-        all_events=None,
-        stimulus_onset=None,
-        stimulus_end=None,
-        scan_triggers=None,
-        metadata=None
+        fname
     ):
         """
         Save event log and metadata to HDF5.
         Gaze data is not included here (use EDF for full data).
         """
+        pass
+        filename = os.path.join(
+            self.outdir,
+            fname.replace(".tsv", ".h5")
+        )
+        
         with h5py.File(filename, "w") as f:
-            # Save events
-            if all_events is not None:
-                dt = h5py.string_dtype(encoding='utf-8')
-                events_arr = np.array([
-                    (float(e[0]), str(e[1]), str(e[2]) if len(e) > 2 else '')
-                    for e in all_events
-                ], dtype=[('time', 'f8'), ('event', dt), ('value', dt)])
-                f.create_dataset("events", data=events_arr)
-            # Save stimulus timing
-            stim_grp = f.create_group('stimulus')
-            if stimulus_onset is not None:
-                stim_grp.attrs['onset'] = stimulus_onset
-            if stimulus_end is not None:
-                stim_grp.attrs['end'] = stimulus_end
-            # Save scanner triggers
-            if scan_triggers is not None:
-                f.create_dataset("scanner_triggers", data=np.array(scan_triggers))
-            # Save metadata
-            if metadata:
-                for k, v in metadata.items():
-                    f.attrs[k] = v
+            pass

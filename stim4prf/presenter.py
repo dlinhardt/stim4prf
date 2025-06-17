@@ -16,9 +16,11 @@ def get_screen_size(screen: int):
         display = pyglet.canvas.get_display()
         screens = display.get_screens()
         if screen < len(screens):
+            logger.info(f"Screen size {screens[screen].width} x {screens[screen].height}")
             return screens[screen].width, screens[screen].height
         else:
             logger.warning(f"Requested screen {screen} not available. Falling back to primary screen (0).")
+            logger.info(f"Screen size {screens[screen].width} x {screens[screen].height}")
             return screens[0].width, screens[0].height
     except Exception as e:
         logger.warning(f"Could not query screens ({e}). Using default PsychoPy screen size.")
@@ -56,15 +58,20 @@ class PRFStimulusPresenter:
         self.end_screen_wait = end_screen_wait
         self.screen = screen
 
-        # Eyetracker instantiation (after window is created)
-        self.eyetracker = None
-        if eyetracker_class is not None:
-            print('starting eyetracker')
-            if eyetracker_kwargs is None:
-                eyetracker_kwargs = {}
-            self.eyetracker = eyetracker_class(**eyetracker_kwargs)
-
+        # Eyetracker instantiation
+        try:
+            self.eyetracker = None
+            if eyetracker_class is not None:
+                logger.info('Initializing eyetracker...')
+                if eyetracker_kwargs is None:
+                    eyetracker_kwargs = {}
+                self.eyetracker = eyetracker_class(outdir=os.path.join('.', 'eyetracker'), **eyetracker_kwargs)
+        except Exception as e:
+            logger.error(f"Exception during eyetracker initialization: {e}")
+            raise
+            
         # Cross-platform screen size handling
+        logger.info('Starting Screen...')
         width, height = get_screen_size(screen)
         window_kwargs = dict(
             fullscr=True,
@@ -72,6 +79,7 @@ class PRFStimulusPresenter:
             units='pix',
             colorSpace='rgb1',
             color=[0.5,0.5,0.5],
+            checkTiming=True,
         )
         if width is not None and height is not None:
             window_kwargs['size'] = (width, height)
@@ -83,6 +91,7 @@ class PRFStimulusPresenter:
         self.nFrames = self.indexed_matrix.shape[0]
 
         # Choose fixation type
+        logger.info('Initializing Fixation...')
         if fixation_kwargs is None:
             fixation_kwargs = {}
         self.fixation = fixation_class(self.win, **fixation_kwargs)
@@ -112,12 +121,24 @@ class PRFStimulusPresenter:
         Logs frame onsets, fixation color changes, and button presses.
         """
         timestamp = datetime.now().strftime('%Y%m%dT%H%M%S')
-        log_fname = os.path.join(
+        log_fname = f"sub-{subject}_ses-{session}_run-{run}_{timestamp}.tsv"
+        log_fpath = os.path.join(
             outdir,
-            f"sub-{subject}_ses-{session}_run-{run}_{timestamp}.tsv"
+            log_fname
         )
         os.makedirs(outdir, exist_ok=True)
+        
+        # --- EYETRACKER SETUP ---
+        if self.eyetracker:
+            if self.verbose:
+                logger.info('Starting eyetracker calibration...')
+            self.eyetracker.connect()
+            self.eyetracker.calibrate(self.win)
+            self.eyetracker.drift_correction()
+            self.eyetracker.start_recording()
+            self.eyetracker.send_message(f"EXPERIMENT_START {subject} {session} {run}")
 
+        # print the start stimulus text
         info_text = visual.TextStim(self.win, text=f"Waiting for scanner...\nPress '{self.trigger_key}' to begin",
                                    color=[1,1,1], height=30)
         info_text.draw()
@@ -129,14 +150,6 @@ class PRFStimulusPresenter:
             logger.info("Awaiting scanner trigger...")
 
         try:
-            # --- EYETRACKER SETUP ---
-            if self.eyetracker:
-                self.eyetracker.connect()
-                self.eyetracker.calibrate()
-                self.eyetracker.drift_correction()
-                self.eyetracker.start_recording()
-                self.eyetracker.send_message(f"EXPERIMENT_START {subject} {session} {run}")
-
             # --- Wait for scanner trigger, then mark stimulus onset ---
             while True:
                 keys = kb.getKeys(keyList=[self.trigger_key, self.abort_key], waitRelease=False)
@@ -223,7 +236,7 @@ class PRFStimulusPresenter:
             all_events.sort(key=lambda x: x[0])
 
             # Save behavioral log
-            with open(log_fname, 'w', newline='') as f:
+            with open(log_fpath, 'w', newline='') as f:
                 writer = csv.writer(f, delimiter='\t')
                 writer.writerow(['Time', 'Event', 'Value'])
                 for event in all_events:
@@ -241,7 +254,7 @@ class PRFStimulusPresenter:
                 writer.writerow(['result', '', result1])
                 writer.writerow(['result', '', result2])
             if self.verbose:
-                logger.info(f"Saved timing log: {log_fname}")
+                logger.info(f"Saved timing log: {log_fpath}")
         except Exception as e:
             logger.error(f"Exception during run: {e}")
             raise
@@ -249,19 +262,7 @@ class PRFStimulusPresenter:
             if hasattr(self, 'win') and self.win:
                 self.win.close()
 
-            if self.eyetracker:
+            if self.eyetracker and all_events:
                 self.eyetracker.send_message("stimulus_end")
                 self.eyetracker.stop_recording()
-                self.eyetracker.download_data()
-                # Let the eyetracker handle saving its own data (agnostic call)
-                h5_fname = log_fname.replace('.tsv', '_eyetrack.h5')
-                self.eyetracker.save_hdf5(
-                    h5_fname,
-                    all_events=all_events,
-                    stimulus_onset=all_events[0][0] if all_events else None,
-                    stimulus_end=all_events[-1][0] if all_events else None,
-                    scan_triggers=scan_trigger_times,
-                    metadata={'subject': subject, 'session': session, 'run': run}
-                )
-                if self.verbose:
-                    logger.info(f"Saved eyetracking data: {h5_fname}")
+                self.eyetracker.download_data(log_fname)
