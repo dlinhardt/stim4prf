@@ -1,14 +1,11 @@
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='[stim4prf][%(levelname)s] %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="[stim4prf][%(levelname)s] %(message)s")
 logger = logging.getLogger("stim4prf")
 
-from .stimulus_loader import StimulusLoader, MatlabStimulusLoader, HDF5StimulusLoader
-from .fixation import Fixation, FixationDot, FixationCross
-from .reaction_time import analyze_reaction_times
-from .presenter import PRFStimulusPresenter
-from .eyetracking import EyeLinkTracker
 from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
+from .eyetracking import EyeLinkTracker
+from .fixation import Fixation, FixationCross, FixationDot
+from .presenter import PRFStimulusPresenter
+from .reaction_time import analyze_reaction_times
+from .stimulus_loader import HDF5StimulusLoader, MatlabStimulusLoader, StimulusLoader

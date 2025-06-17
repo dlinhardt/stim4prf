@@ -1,11 +1,9 @@
 import numpy as np
 
+
 # ----------- Reaction Time Analysis Helper -----------
 def analyze_reaction_times(
-    switch_log,
-    button_events,
-    min_rt: float = 0.3,
-    max_rt: float = 3.0
+    switch_log, button_events, min_rt: float = 0.3, max_rt: float = 3.0
 ):
     """
     Analyze reaction times between color switches and button presses.
@@ -22,5 +20,5 @@ def analyze_reaction_times(
                 n_hits += 1
                 reaction_times.append(dt)
                 break
-    mean_rt = np.mean(reaction_times) if reaction_times else float('nan')
+    mean_rt = np.mean(reaction_times) if reaction_times else float("nan")
     return n_hits, n_switches, mean_rt, reaction_times
