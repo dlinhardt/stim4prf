@@ -29,9 +29,7 @@ def get_screen_size(screen: int):
             logger.warning(
                 f"Requested screen {screen} not available. Falling back to primary screen (0)."
             )
-            logger.info(
-                f"Screen size {screens[screen].width} x {screens[screen].height}"
-            )
+            logger.info(f"Screen size {screens[0].width} x {screens[0].height}")
             return screens[0].width, screens[0].height
     except Exception as e:
         logger.warning(
@@ -202,6 +200,9 @@ class PRFStimulusPresenter:
                 if kb.getKeys(keyList=[self.trigger_key], waitRelease=False):
                     scan_trigger_times.append(t)
 
+                    if self.eyetracker:
+                        self.eyetracker.send_message("scanner_trigger")
+
                 # log the button presses
                 pressed = kb.getKeys(
                     keyList=button_keys, waitRelease=False, clear=False
@@ -225,11 +226,6 @@ class PRFStimulusPresenter:
                         logger.info(f"Presented frame {frame_idx}/{self.nFrames}")
                 else:
                     core.wait(0.001)
-
-                if self.eyetracker and kb.getKeys(
-                    keyList=[self.trigger_key], waitRelease=False
-                ):
-                    self.eyetracker.send_message("scanner_trigger")
 
             final_text = visual.TextStim(
                 self.win,

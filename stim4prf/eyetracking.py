@@ -16,7 +16,7 @@ from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 
 class EyeTrackerBase(ABC):
     @abstractmethod
-    def calibrate(self):
+    def calibrate(self, win):
         pass
 
     @abstractmethod
@@ -36,11 +36,11 @@ class EyeTrackerBase(ABC):
         pass
 
     @abstractmethod
-    def download_data(self):
+    def download_data(self, fname):
         pass
 
     @abstractmethod
-    def save_hdf5(self, filename, **kwargs):
+    def save_hdf5(self, fname):
         pass
 
 
@@ -61,11 +61,13 @@ class EyeLinkTracker(EyeTrackerBase):
     def connect(self):
         if self.dummy_mode:
             self.el_tracker = pylink.EyeLink(None)
+            logger.info("Initialized dummy EyeLink tracker.")
         else:
             try:
                 self.el_tracker = pylink.EyeLink("100.1.1.1")
+                logger.info("Successfully connected to EyeLink tracker.")
             except:
-                logger.error("Could not connect to eyetracker!")
+                logger.exception("Could not connect to eyetracker!")
                 self.win.close()
                 raise
 
@@ -92,8 +94,7 @@ class EyeLinkTracker(EyeTrackerBase):
         genv.setTargetType("circle")
         genv.setCalibrationSounds("", "", "")
         pylink.openGraphicsEx(genv)
-        print("check pre-doTrackerSetup")
-        print(self.dummy_mode)
+
         # Run calibration
         if not self.dummy_mode:
             et_calib_msg = (
@@ -106,7 +107,7 @@ class EyeLinkTracker(EyeTrackerBase):
                 self.el_tracker.doTrackerSetup()
             except RuntimeError as err:
                 logger.error(err)
-                el_tracker.exitCalibration()
+                self.el_tracker.exitCalibration()
 
     def drift_correction(self):
         # Center of the screen
@@ -128,7 +129,6 @@ class EyeLinkTracker(EyeTrackerBase):
 
     def download_data(self, fname):
         # Download EDF file from Host PC to local session folder
-        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         local_edf = os.path.join(self.outdir, fname.replace(".tsv", ".edf"))
         self.el_tracker.setOfflineMode()
         self.el_tracker.sendCommand("clear_screen 0")
@@ -136,9 +136,11 @@ class EyeLinkTracker(EyeTrackerBase):
         self.el_tracker.closeDataFile()
         try:
             self.el_tracker.receiveDataFile(self.edf_file, local_edf)
+            logger.info(f"Successfully downloaded EDF file to {local_edf}")
         except RuntimeError as err:
             logger.error(err)
         self.el_tracker.close()
+        logger.debug("Closed connection to EyeLink tracker.")
 
     def save_hdf5(self, fname):
         """
