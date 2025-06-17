@@ -55,7 +55,7 @@ class PRFStimulusPresenter:
         self.frame_log_interval = frame_log_interval
         self.end_screen_wait = end_screen_wait
         self.screen = screen
-        
+
         # Eyetracker instantiation (after window is created)
         self.eyetracker = None
         if eyetracker_class is not None:
@@ -68,15 +68,14 @@ class PRFStimulusPresenter:
         width, height = get_screen_size(screen)
         window_kwargs = dict(
             fullscr=True,
-            screen=self.screen,
+            screen=screen,
             units='pix',
             colorSpace='rgb1',
             color=[0.5,0.5,0.5],
         )
         if width is not None and height is not None:
             window_kwargs['size'] = (width, height)
-            
-        # Create PsychoPy window
+
         self.win = visual.Window(**window_kwargs)
 
         # Load only indices and LUT
