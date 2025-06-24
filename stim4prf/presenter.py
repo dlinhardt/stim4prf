@@ -62,6 +62,9 @@ class PRFStimulusPresenter:
         abort_key: str = "escape",
         frame_log_interval: int = 100,
         end_screen_wait: float = 2.0,
+        transpose_images: bool = False,  # <-- add these
+        flipud_images: bool = False,
+        fliplr_images: bool = False,
     ):
         """
         Initialize the presenter and load stimulus.
@@ -80,6 +83,15 @@ class PRFStimulusPresenter:
 
         # Load the stimulus
         self.indexed_matrix, self.lut, self.frame_duration = self.loader.load()
+
+        # --- Apply image transformations ONCE here ---
+        if transpose_images:
+            self.indexed_matrix = self.indexed_matrix.transpose(0, 2, 1)
+        if flipud_images:
+            self.indexed_matrix = np.flip(self.indexed_matrix, axis=1)
+        if fliplr_images:
+            self.indexed_matrix = np.flip(self.indexed_matrix, axis=2)
+
         self.nFrames = self.indexed_matrix.shape[0]
 
         # Initialize Eyetracker
