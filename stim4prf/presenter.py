@@ -84,6 +84,8 @@ class PRFStimulusPresenter:
         self.indexed_matrix, self.lut, self.frame_duration = self.loader.load()
 
         # --- Apply image transformations ONCE here ---
+        self.flipud_images = flipud_images
+        self.fliplr_images = fliplr_images
         if flipud_images:
             self.indexed_matrix = np.flip(self.indexed_matrix, axis=1)
         if fliplr_images:
@@ -170,6 +172,8 @@ class PRFStimulusPresenter:
             text=f"Waiting for scanner...\nPress '{self.trigger_key}' to begin",
             color=[1, 1, 1],
             height=30,
+            flipHoriz=self.fliplr_images,
+            flipVert=self.flipud_images,
         )
         info_text.draw()
         self.win.flip()
