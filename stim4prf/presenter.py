@@ -186,16 +186,33 @@ class PRFStimulusPresenter:
             self.eyetracker.start_recording()
             self.eyetracker.send_message(f"EXPERIMENT_START {subject} {session} {run}")
 
-        # --- Show start screen and wait for scanner trigger ---
-        info_text = visual.TextStim(
+        # --- Show start screen: fixation + instructions ---
+        # Draw fixation at center
+        self.fixation.update()
+        self.fixation.draw()
+
+        # Instruction at center
+        center_text = visual.TextStim(
             self.win,
-            text=f"Waiting for scanner...\nPress '{self.trigger_key}' to begin",
+            text="Please fixate on the central target and keep your head still.",
             color=[1, 1, 1],
             height=30,
+            pos=(0, 30),
             flipHoriz=self.flipHoriz,
             flipVert=self.flipVert,
         )
-        info_text.draw()
+
+        # Scanner wait message halfway to the bottom
+        bottom_text = visual.TextStim(
+            self.win,
+            text=f"Waiting for scanner...\nPress '{self.trigger_key}' to begin.",
+            color=[1, 1, 1],
+            height=30,
+            pos=(0, -self.win.size[1] / 4),
+        )
+
+        center_text.draw()
+        bottom_text.draw()
         self.win.flip()
         kb.clearEvents()
         core.wait(0.2)
