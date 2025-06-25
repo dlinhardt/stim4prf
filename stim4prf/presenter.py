@@ -157,7 +157,7 @@ class PRFStimulusPresenter:
             self.win,
             text="Break!\n\nPress ENTER to continue.",
             color=[1, 1, 1],
-            height=30,
+            height=60,
             pos=(0, -self.win.size[1] / 4),  # halfway to the bottom
         )
         break_text.draw()
@@ -165,8 +165,11 @@ class PRFStimulusPresenter:
         kb = keyboard.Keyboard()
         kb.clearEvents()
         while True:
-            keys = kb.getKeys(keyList=["return", "enter"], waitRelease=False)
-            if any(k.name in ("return", "enter") for k in keys):
+            keys = kb.getKeys(keyList=["return", "enter", self.abort_key], waitRelease=False)
+            if any(k.name == self.abort_key for k in keys):
+                logger.info("Aborted by user.")
+                return
+            elif any(k.name in ("return", "enter") for k in keys):
                 break
             core.wait(0.01)
 
@@ -227,12 +230,11 @@ class PRFStimulusPresenter:
                 keys = kb.getKeys(
                     keyList=[self.trigger_key, self.abort_key], waitRelease=False
                 )
-                if keys:
-                    if keys[0].name == self.abort_key:
-                        logger.info("Aborted by user.")
-                        return
-                    elif keys[0].name == self.trigger_key:
-                        break
+                if any(k.name == self.abort_key for k in keys):
+                    logger.info("Aborted by user.")
+                    return
+                elif any(k.name == self.trigger_key for k in keys):
+                    break
                 core.wait(0.001)
             if self.verbose:
                 logger.info("Scanner trigger received, starting presentation.")
