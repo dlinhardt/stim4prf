@@ -29,7 +29,7 @@ class FixationDot(Fixation):
     def __init__(
         self,
         win,
-        radius: int = 8,
+        size: int = 8,
         colors: tuple = ("magenta", "green"),
         color_switch_prob: float = 0.01,
         min_switch_interval: float = 2.0,
@@ -37,7 +37,7 @@ class FixationDot(Fixation):
     ):
         super().__init__(verbose)
         self.win = win
-        self.radius = radius
+        self.radius = size / 2
         self.colors = colors
         self.color_switch_prob = color_switch_prob
         self.current_color = colors[0]
