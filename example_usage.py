@@ -42,13 +42,13 @@ presenter = PRFStimulusPresenter(
     eyetracker_class=eyetracker_class,  # pass the eyetracker class
     eyetracker_kwargs=eyetracker_kwargs,
     screen=1,  # Which screen to use (0=primary)
-    verbose=True,  # Print extra info
     trigger_key="6",  # Key the scanner sends as trigger
     abort_key="escape",  # Key to abort run
     frame_log_interval=100,  # Log every N frames
     end_screen_wait=2.0,  # Seconds to show end screen
     flipVert=False,  # Flip images vertically
     flipHoriz=False,  # Flip images horizontally
+    verbose=True,  # Print extra info
 )
 
 # --- Run the presenter ---
