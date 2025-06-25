@@ -52,18 +52,15 @@ presenter = PRFStimulusPresenter(
 )
 
 # --- Run the presenter ---
-presenter.run(
-    subject="01",
-    session="01",
-    run="01",
-    outdir=os.path.join(".", "logs"),
-    button_keys=["1", "2", "3", "4"],  # List of buttons to accept during the run
-)
+subject = "01"
+session = "01"
+runs = ["01", "02"]  # List of runs to execute
 
-presenter.run(
-    subject="01",
-    session="01",
-    run="02",
-    outdir=os.path.join(".", "logs"),
-    button_keys=["1", "2", "3", "4"],
-)
+for run in runs:
+    presenter.run(
+        subject=subject,
+        session=session,
+        run=run,
+        outdir=os.path.join(".", "logs"),
+        button_keys=["1", "2", "3", "4"],  # List of buttons to accept during the run
+    )
