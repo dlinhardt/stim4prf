@@ -31,6 +31,8 @@ presenter = PRFStimulusPresenter(
     trigger_key="6",
     abort_key="escape",
     end_screen_wait=2.0,
+    flipVert=False,
+    flipHoriz=False,
     eyetracker_class=EyeLinkTracker,
     eyetracker_kwargs={"dummy_mode": False},
 )

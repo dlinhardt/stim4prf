@@ -62,8 +62,8 @@ class PRFStimulusPresenter:
         abort_key: str = "escape",
         frame_log_interval: int = 100,
         end_screen_wait: float = 2.0,
-        flipud_images: bool = False,
-        fliplr_images: bool = False,
+        flipVert: bool = False,
+        flipHoriz: bool = False,
     ):
         """
         Initialize the presenter and load stimulus.
@@ -84,11 +84,11 @@ class PRFStimulusPresenter:
         self.indexed_matrix, self.lut, self.frame_duration = self.loader.load()
 
         # --- Apply image transformations ONCE here ---
-        self.flipud_images = flipud_images
-        self.fliplr_images = fliplr_images
-        if flipud_images:
+        self.flipVert = flipVert
+        self.flipHoriz = flipHoriz
+        if flipVert:
             self.indexed_matrix = np.flip(self.indexed_matrix, axis=1)
-        if fliplr_images:
+        if flipHoriz:
             self.indexed_matrix = np.flip(self.indexed_matrix, axis=2)
 
         self.nFrames = self.indexed_matrix.shape[0]
@@ -192,8 +192,8 @@ class PRFStimulusPresenter:
             text=f"Waiting for scanner...\nPress '{self.trigger_key}' to begin",
             color=[1, 1, 1],
             height=30,
-            flipHoriz=self.fliplr_images,
-            flipVert=self.flipud_images,
+            flipHoriz=self.flipHoriz,
+            flipVert=self.flipVert,
         )
         info_text.draw()
         self.win.flip()
