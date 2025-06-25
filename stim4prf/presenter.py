@@ -80,7 +80,7 @@ class PRFStimulusPresenter:
         self.frame_log_interval = frame_log_interval
         self.end_screen_wait = end_screen_wait
 
-        # Load the stimulus
+        # --- Load the stimulus ---
         self.indexed_matrix, self.lut, self.frame_duration = self.loader.load()
 
         # --- Apply image transformations ONCE here ---
@@ -149,14 +149,34 @@ class PRFStimulusPresenter:
         if button_keys is None:
             button_keys = ["1", "2", "3", "4"]
 
+        # --- Setup window, fixation, and image stimulus ---
         self._setup_run()
 
+        # --- Show break screen and wait for ENTER ---
+        break_text = visual.TextStim(
+            self.win,
+            text="Break!\n\nPress ENTER to continue.",
+            color=[1, 1, 1],
+            height=30,
+            pos=(0, -self.win.size[1] / 4),  # halfway to the bottom
+        )
+        break_text.draw()
+        self.win.flip()
+        kb = keyboard.Keyboard()
+        kb.clearEvents()
+        while True:
+            keys = kb.getKeys(keyList=["return", "enter"], waitRelease=False)
+            if any(k.name in ("return", "enter") for k in keys):
+                break
+            core.wait(0.01)
+
+        # --- Prepare logging ---
         timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         log_fname = f"sub-{subject}_ses-{session}_run-{run}_{timestamp}.tsv"
         log_fpath = os.path.join(outdir, log_fname)
         os.makedirs(outdir, exist_ok=True)
 
-        # --- Eyetracker setup ---
+        # --- Eyetracker setup and calibration ---
         if self.eyetracker:
             if self.verbose:
                 logger.info("Starting eyetracker calibration...")
@@ -177,7 +197,6 @@ class PRFStimulusPresenter:
         )
         info_text.draw()
         self.win.flip()
-        kb = keyboard.Keyboard()
         kb.clearEvents()
         core.wait(0.2)
         if self.verbose:
@@ -201,6 +220,7 @@ class PRFStimulusPresenter:
             if self.verbose:
                 logger.info("Scanner trigger received, starting presentation.")
 
+            # --- Initialize clocks and event logs ---
             global_clock = core.Clock()
             frame_onsets = []
             button_events = []
@@ -274,7 +294,7 @@ class PRFStimulusPresenter:
                 all_events.append((t, "scanner_trigger", f"button {self.trigger_key}"))
             all_events.sort(key=lambda x: x[0])
 
-            # --- Save behavioral log ---
+            # --- Save behavioral log and analyze reaction times ---
             with open(log_fpath, "w", newline="") as f:
                 writer = csv.writer(f, delimiter="\t")
                 writer.writerow(["Time", "Event", "Value"])
