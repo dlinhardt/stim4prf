@@ -29,7 +29,7 @@ class FixationDot(Fixation):
     def __init__(
         self,
         win,
-        size: int = 8,
+        size: int = 20,
         colors: tuple = ("magenta", "green"),
         color_switch_prob: float = 0.01,
         min_switch_interval: float = 2.0,
@@ -83,7 +83,7 @@ class FixationCross(Fixation):
     def __init__(
         self,
         win,
-        size: int = 30,
+        size: int = 20,
         colors: tuple = ("magenta", "green"),
         color_switch_prob: float = 0.01,
         min_switch_interval: float = 2.0,
@@ -99,7 +99,12 @@ class FixationCross(Fixation):
         self.switch_log = []
         self.min_switch_interval = min_switch_interval
         self.text = visual.TextStim(
-            win, text="+", color=self.current_color, height=self.size, pos=(0, 0)
+            win,
+            text="+",
+            color=self.current_color,
+            height=self.size,
+            pos=(0, 0),
+            units="pix",
         )
 
     def update(self, now: float = None) -> None:
