@@ -82,6 +82,7 @@ class PRFStimulusPresenter:
 
         # --- Load the stimulus ---
         self.indexed_matrix, self.lut, self.frame_duration = self.loader.load()
+        self.indexed_matrix = np.moveaxis(self.indexed_matrix, -2, -1)
 
         # --- Apply image transformations ONCE here ---
         self.flipVert = flipVert
@@ -165,7 +166,9 @@ class PRFStimulusPresenter:
         kb = keyboard.Keyboard()
         kb.clearEvents()
         while True:
-            keys = kb.getKeys(keyList=["return", "enter", self.abort_key], waitRelease=False)
+            keys = kb.getKeys(
+                keyList=["return", "enter", self.abort_key], waitRelease=False
+            )
             if any(k.name == self.abort_key for k in keys):
                 logger.info("Aborted by user.")
                 return
