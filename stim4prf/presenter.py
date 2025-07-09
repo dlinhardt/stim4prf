@@ -82,7 +82,6 @@ class PRFStimulusPresenter:
 
         # --- Load the stimulus ---
         self.indexed_matrix, self.lut, self.frame_duration = self.loader.load()
-        self.indexed_matrix = np.moveaxis(self.indexed_matrix, -2, -1)
 
         # --- Apply image transformations ONCE here ---
         self.flipVert = flipVert
