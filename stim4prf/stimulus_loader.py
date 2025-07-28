@@ -68,6 +68,9 @@ class MatlabStimulusLoader(StimulusLoader):
         lut = self.normalize_lut(lut, self.verbose)
         frame_duration = stimulus["stimulus"]["seqtiming"].ravel()[0][1]
 
+        # transpose the matrix to match the correct orientation
+        indexed_matrix = np.moveaxis(indexed_matrix, -2, -1)
+
         if self.verbose:
             logger.info(f"Frame duration: {frame_duration:.4f} seconds")
             logger.info("Finished preprocessing MATLAB stimulus.")
