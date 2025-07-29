@@ -1,7 +1,9 @@
 import os
-from psychopy import  gui,data,core,hardware
+
+from psychopy import core, data, gui, hardware
+
 from stim4prf import HDF5StimulusLoader, MatlabStimulusLoader, PRFStimulusPresenter
-from stim4prf.eyetracking import MRCEyeTracking
+from stim4prf.eyetracking import EyeLinkTracker, MRCEyeTracking
 from stim4prf.fixation import ABCTargetFixation, FixationCross, FixationDot
 
 # --- Choose your loader ---
@@ -9,22 +11,21 @@ deviceManager = hardware.DeviceManager()
 # ensure that relative paths start from the same directory as this script
 _thisDir = os.path.dirname(os.path.abspath(__file__))
 # store info about the experiment session
-psychopyVersion = '2024.1.5'
-expName = 'Full_retina_run'
+psychopyVersion = "2024.1.5"
+expName = "Full_retina_run"
 expInfo = {
-    'sessionID': 'Retina_MRI_',
-    'skipinstruction': 'on',
-    'targetRing': '13',
-    'language': 'German',
-    'eye_external': 'on',
-    'AttemptNumber': '1',
-    'VisAtt': 'on',
-    'pRF': 'on',
-    'date|hid': data.getDateStr(),
-    'expName|hid': expName,
-    'psychopyVersion|hid': psychopyVersion,
+    "sessionID": "Retina_MRI_",
+    "skipinstruction": "on",
+    "targetRing": "13",
+    "language": "German",
+    "eye_external": "on",
+    "AttemptNumber": "1",
+    "VisAtt": "on",
+    "pRF": "on",
+    "date|hid": data.getDateStr(),
+    "expName|hid": expName,
+    "psychopyVersion|hid": psychopyVersion,
 }
-
 
 
 def showExpInfoDlg(expInfo):
@@ -34,7 +35,7 @@ def showExpInfoDlg(expInfo):
     ==========
     expInfo : dict
         Information about this experiment.
-    
+
     Returns
     ==========
     dict
@@ -49,6 +50,7 @@ def showExpInfoDlg(expInfo):
     print("this expInfoDlg was called")
     # return expInfo
     return expInfo
+
 
 # For HDF5 files:
 loader = HDF5StimulusLoader(
@@ -74,6 +76,8 @@ fixation_kwargs = {
 eyetracker_class = MRCEyeTracking  # or EyeLinkTracker if connected
 eyetracker_kwargs = {
     "dummy_mode": False,  # Set True for testing without hardware
+    "outdir": os.path.join(".", "eyetracker"),  # Directory to save eyetracker data
+    "dll_path": os.path.abspath("DLL_1_5_3/MRC_Eyetracking.dll"),  # Path to the MRC DLL
 }
 
 # --- Create the stimulus presenter with all options ---
@@ -93,23 +97,29 @@ presenter = PRFStimulusPresenter(
     verbose=True,  # Print extra info
 )
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     expInfo = showExpInfoDlg(expInfo=expInfo)
-    if expInfo['pRF'] == 'on':
+    if expInfo["pRF"] == "on":
         subject = expInfo["sessionID"]
         session = expInfo["AttemptNumber"]
         runs = ["01", "02"]
-        if expInfo['eye_external'] == 'on':
-                    ip = "169.254.197.24"
+        if expInfo["eye_external"] == "on":
+            ip = "169.254.197.24"
         else:
-                    ip = "169.254.60.154"
+            ip = "169.254.60.154"
         # List of runs to execute
 
         for run in runs:
-            presenter.run(ip = ip,
+            presenter.run(
+                ip=ip,
                 subject=subject,
                 session=session,
                 run=run,
                 outdir=os.path.join(".", "data"),
-                button_keys=["1", "2", "3", "4"],  # List of buttons to accept during the run
+                button_keys=[
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                ],  # List of buttons to accept during the run
             )

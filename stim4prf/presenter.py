@@ -8,7 +8,7 @@ from psychopy.hardware import keyboard
 
 from stim4prf import logger
 
-from .eyetracking import MRCEyeTracking
+from .eyetracking import EyeLinkTracker, MRCEyeTracking
 from .fixation import ABCTargetFixation, FixationCross, FixationDot
 from .reaction_time import analyze_reaction_times
 
@@ -96,9 +96,7 @@ class PRFStimulusPresenter:
         # Initialize Eyetracker
         self.eyetracker = None
         if self.eyetracker_class is not None:
-            self.eyetracker = self.eyetracker_class(
-                os.path.abspath("DLL_1_5_3/MRC_Eyetracking.dll")
-            )
+            self.eyetracker = self.eyetracker_class(**self.eyetracker_kwargs)
 
     def _setup_run(self):
         """
@@ -135,12 +133,12 @@ class PRFStimulusPresenter:
 
     def run(
         self,
-        ip: str,
         subject: str,
         session: str,
         run: str,
         outdir: str,
         button_keys=None,
+        ip: str = None,
     ) -> None:
         """
         Run the stimulus presentation.
@@ -154,58 +152,38 @@ class PRFStimulusPresenter:
         self._setup_run()
 
         # --- Show break screen and wait for ENTER ---
-        crossSize = 108 * 0.8
-        barThickness = 108 * 0.07
-        color = [1, 1, 1]
-        depth = -3.0
+        break_text = visual.TextStim(
+            self.win,
+            text="Break!\n\nPress ENTER to continue.\n\nPress SPACE to show fixation.",
+            color=[1, 1, 1],
+            height=60,
+            pos=(0, -self.win.size[1] / 4),  # halfway to the bottom
+        )
+        break_text.draw()
 
-# Vertical bar
-        fixVert = visual.ShapeStim(
-            win=self.win,
-            vertices=[
-            (-barThickness/2, -crossSize/2),
-            ( barThickness/2, -crossSize/2),
-            ( barThickness/2,  crossSize/2),
-            (-barThickness/2,  crossSize/2),
-            ],
-            fillColor=color,
-            lineColor=color,
-            opacity=1,
-            pos=(0, 0),
-            closeShape=True,
-            depth=depth)
-
-# Horizontal bar
-        fixHorz = visual.ShapeStim(
-            win=self.win,
-            vertices=[
-            (-crossSize/2, -barThickness/2),
-            ( crossSize/2, -barThickness/2),
-            ( crossSize/2,  barThickness/2),
-            (-crossSize/2,  barThickness/2),
-            ],
-            fillColor=color,
-            lineColor=color,
-            opacity=1,
-            pos=(0, 0),
-            closeShape=True,
-            depth=depth)
-        fixHorz.draw()
-        fixVert.draw()
         self.win.flip()
         kb = keyboard.Keyboard()
         kb.clearEvents()
         while True:
-            keys = kb.getKeys(keyList=["return", "enter", "space", self.abort_key], waitRelease=False)
+            keys = kb.getKeys(
+                keyList=["return", "enter", "space", self.abort_key], waitRelease=False
+            )
             if any(k.name == self.abort_key for k in keys):
                 logger.info("Aborted by user.")
                 return
-            elif any(k.name in ("return", "enter", "space") for k in keys):
+            elif any(k.name == "space" for k in keys):
+                # Show fixation for 2 seconds
+                self.fixation.update()
+                self.fixation.draw()
+                self.win.flip()
+                break
+            elif any(k.name in ("return", "enter") for k in keys):
                 break
             core.wait(0.01)
 
         # --- Prepare logging ---
-        log_fname = f"pRF_{subject}_ses_{session}_run_{run}.tsv"
+        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        log_fname = f"sub-{subject}_ses-{session}_run-{run}_{timestamp}.tsv"
         log_fpath = os.path.join(outdir, log_fname)
         os.makedirs(outdir, exist_ok=True)
 
@@ -213,11 +191,13 @@ class PRFStimulusPresenter:
         if self.eyetracker:
             if self.verbose:
                 logger.info("Starting eyetracker calibration...")
-            self.eyetracker.connect(ip = ip)
+            self.eyetracker.connect(ip=ip)
             self.eyetracker.calibrate(self.win)
-            #self.eyetracker.drift_correction()
+            self.eyetracker.drift_correction()
             self.eyetracker.start_recording()
-            self.eyetracker.send_message(msg = f"EXPERIMENT_START {subject} {session} {run}")
+            self.eyetracker.send_message(
+                msg=f"EXPERIMENT_START {subject} {session} {run}"
+            )
 
         # --- Show start screen: fixation + instructions ---
         # Draw fixation at center
@@ -245,7 +225,7 @@ class PRFStimulusPresenter:
         )
 
         center_text.draw()
-        #bottom_text.draw()
+        bottom_text.draw()
         self.win.flip()
         kb.clearEvents()
         core.wait(0.2)
@@ -279,7 +259,7 @@ class PRFStimulusPresenter:
 
             # --- Mark stimulus onset for eyetracker ---
             if self.eyetracker:
-                self.eyetracker.send_message(msg = "stimulus_onset")
+                self.eyetracker.send_message(msg="stimulus_onset")
 
             # --- Main stimulus presentation loop ---
             while frame_idx < self.nFrames:
@@ -294,7 +274,7 @@ class PRFStimulusPresenter:
                 if kb.getKeys(keyList=[self.trigger_key], waitRelease=False):
                     scan_trigger_times.append(t)
                     if self.eyetracker:
-                        self.eyetracker.send_message(msg = "scanner_trigger")
+                        self.eyetracker.send_message(msg="scanner_trigger")
 
                 # --- Log button presses ---
                 pressed = kb.getKeys(
@@ -374,6 +354,6 @@ class PRFStimulusPresenter:
             if hasattr(self, "win") and self.win:
                 self.win.close()
             if self.eyetracker:
-                self.eyetracker.send_message(msg = "stimulus_end")
+                self.eyetracker.send_message(msg="stimulus_end")
                 self.eyetracker.stop_recording()
-                #self.eyetracker.download_data(log_fname)
+                self.eyetracker.download_data(log_fname)
