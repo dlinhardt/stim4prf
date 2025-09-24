@@ -59,18 +59,20 @@ class EyeLinkTracker(EyeTrackerBase):
         self.dummy_mode = dummy_mode
         self.el_tracker = None
 
-    def connect(self):
+    def connect(self, ip="100.1.1.1"):
         if self.dummy_mode:
             self.el_tracker = pylink.EyeLink(None)
             logger.info("Initialized dummy EyeLink tracker.")
         else:
             try:
-                self.el_tracker = pylink.EyeLink("100.1.1.1")
+                self.el_tracker = pylink.EyeLink(ip)
                 logger.info("Successfully connected to EyeLink tracker.")
             except:
                 logger.exception("Could not connect to eyetracker!")
                 raise
-
+        if not self.el_tracker.isConnected():
+            logger.exception("tracker not connected!")
+            raise
         timestamp = datetime.now().strftime("T%H%M%S")
         self.edf_file = timestamp + ".edf"
         self.el_tracker.openDataFile(self.edf_file)
