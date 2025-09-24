@@ -4,14 +4,13 @@ import platform
 from abc import ABC, abstractmethod
 from ctypes import POINTER, Structure, byref, c_char_p, c_double, c_int
 from datetime import datetime
+from stim4prf import logger
 
 import h5py
 import numpy as np
 import psychopy
 import pylink
 from psychopy import colors, core, event, visual
-
-from stim4prf import logger
 
 from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 
@@ -70,7 +69,6 @@ class EyeLinkTracker(EyeTrackerBase):
                 logger.info("Successfully connected to EyeLink tracker.")
             except:
                 logger.exception("Could not connect to eyetracker!")
-                self.win.close()
                 raise
 
         timestamp = datetime.now().strftime("T%H%M%S")
@@ -142,6 +140,9 @@ class EyeLinkTracker(EyeTrackerBase):
         Save event log and metadata to HDF5.
         Gaze data is not included here (use EDF for full data).
         """
+        raise NotImplementedError(
+            "HDF5 saving is not implemented for EyeLink tracker. Use EDF files for full data."
+        )
         pass
         filename = os.path.join(self.outdir, fname.replace(".tsv", ".h5"))
         with h5py.File(filename, "w") as f:
@@ -437,7 +438,7 @@ class MRCEyeTracking(EyeTrackerBase):
                     print("calibration done")
                     self.eye_stop_calibration()
                     calibration_running = False
-                    self.eye_end_stream()
+                    self.eye_stop_stream()
                 point = self.eye_get_calibration_point()
                 stimulus = visual.Circle(
                     win=win,
