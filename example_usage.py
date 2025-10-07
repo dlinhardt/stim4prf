@@ -35,6 +35,8 @@ eyetracker_class = EyeLinkTracker  # or EyeLinkTracker if connected
 eyetracker_kwargs = {
     "dummy_mode": False,  # Set True for testing without hardware
     "outdir": os.path.join(".", "eyetracker"),  # Directory to save eyetracker data
+    "skip_calibration": False, # when eyetracking is not working well we can skip callibration and drif correction
+    "skip_driftcorrection": True, # when eyetracking is not working well we can skip the drift correction
 }
 
 # --- Create the stimulus presenter with all options ---
@@ -45,12 +47,12 @@ presenter = PRFStimulusPresenter(
     eyetracker_class=eyetracker_class,  # pass the eyetracker class
     eyetracker_kwargs=eyetracker_kwargs,
     screen=1,  # Which screen to use (0=primary)
-    trigger_key="s",  # Key the scanner sends as trigger
+    trigger_key="6",  # Key the scanner sends as trigger
     abort_key="escape",  # Key to abort run
     frame_log_interval=100,  # Log every N frames
     end_screen_wait=2.0,  # Seconds to show end screen
     flipVert=False,  # Flip images vertically
-    flipHoriz=True,  # Flip images horizontally
+    flipHoriz=False,  # Flip images horizontally
     verbose=True,  # Print extra info
 )
 

@@ -138,7 +138,7 @@ class PRFStimulusPresenter:
         run: str,
         outdir: str,
         button_keys=None,
-        ip: str | None = None,
+        ip: str = None,
     ) -> None:
         """
         Run the stimulus presentation.
@@ -172,10 +172,11 @@ class PRFStimulusPresenter:
                 logger.info("Aborted by user.")
                 return
             elif any(k.name == "space" for k in keys):
-                # Show fixation for 2 seconds
+                # Show fixation for 5 seconds
                 self.fixation.update()
                 self.fixation.draw()
                 self.win.flip()
+                core.wait(5)
                 break
             elif any(k.name in ("return", "enter") for k in keys):
                 break
@@ -301,6 +302,8 @@ class PRFStimulusPresenter:
                 for key in pressed:
                     if key.name not in prev_button_state:
                         button_events.append((t, key.name))
+                        if self.eyetracker:
+                            self.eyetracker.send_message(msg=f"button_press {key.name}")
                 prev_button_state = set(k.name for k in pressed)
 
                 # --- Present next stimulus frame if time ---
@@ -309,7 +312,7 @@ class PRFStimulusPresenter:
                     rgb = self.lut[idx]
                     self.img_stim.setImage(rgb)
                     self.img_stim.draw()
-                    self.fixation.update(now=t)
+                    self.fixation.update(now=t, et=self.eyetracker)
                     self.fixation.draw()
                     self.win.flip()
                     frame_onsets.append(t)

@@ -53,7 +53,7 @@ class FixationDot(Fixation):
             units="pix",
         )
 
-    def update(self, now: float = None) -> None:
+    def update(self, now: float = None, et = None) -> None:
         if now is None:
             return
         if (
@@ -70,6 +70,8 @@ class FixationDot(Fixation):
                 self.circle.lineColor = self.current_color
                 self.last_switch_time = now
                 self.switch_log.append((now, self.current_color))
+                if et:
+                    et.send_message(msg=f"fixation color change to {self.current_color}")
                 if self.verbose:
                     logger.info(f"Fixation color switched to {self.current_color}")
 
@@ -107,7 +109,7 @@ class FixationCross(Fixation):
             units="pix",
         )
 
-    def update(self, now: float = None) -> None:
+    def update(self, now: float = None, et = None) -> None:
         if now is None:
             return
         if (
@@ -123,6 +125,8 @@ class FixationCross(Fixation):
                 self.text.color = self.current_color
                 self.last_switch_time = now
                 self.switch_log.append((now, self.current_color))
+                if et:
+                    et.send_message(msg=f"fixation color change to {self.current_color}")
                 if self.verbose:
                     logger.info(f"Fixation color switched to {self.current_color}")
 

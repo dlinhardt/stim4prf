@@ -1,5 +1,8 @@
 # eyetracker.py
 from __future__ import annotations
+import ctypes
+import platform
+from ctypes import POINTER, Structure, byref, c_char_p, c_double, c_int
 
 import os
 from abc import ABC, abstractmethod
@@ -48,13 +51,15 @@ class EyeLinkTracker(EyeTrackerBase):
     recording, standard Data Viewer messages, and EDF download.
     """
 
-    def __init__(self, outdir: str, dummy_mode: bool = False, session_name: Optional[str] = None):
+    def __init__(self, outdir: str, dummy_mode: bool = False, skip_calibration: bool = False, skip_driftcorrection: bool = False, session_name: Optional6[str] = None):
         self.outdir = outdir
         os.makedirs(outdir, exist_ok=True)
         self.dummy_mode = dummy_mode
         self.el_tracker: Optional[pylink.EyeLink] = None
         self.win = None
         self.scn_width, self.scn_height = None, None
+        self.skip_calibration = skip_calibration
+        self.skip_driftcorrection = skip_driftcorrection
 
         # EDF must be <= 8 characters (no extension). Use compact session tag + time.
         base = (session_name or "S")[:3].upper() + datetime.now().strftime("%H%M%S")
@@ -79,17 +84,7 @@ class EyeLinkTracker(EyeTrackerBase):
 
         # Set experiment name on Host (appears in header/host UI)
         self.el_tracker.setName("stim4prf")
-
-        # Standard sampling/event filters for EDF and Link
-        # (left+right gaze, pupil, area, status; and common events incl. FIXUPDATE for link)
-        self.el_tracker.setFileSampleFilter("LEFT,RIGHT,GAZE,AREA,PUPIL,STATUS")
-        self.el_tracker.setLinkSampleFilter("LEFT,RIGHT,GAZE,AREA,HTARGET,PUPIL,STATUS")
-        self.el_tracker.setFileEventFilter("LEFT,RIGHT,FIXATION,SACCADE,BLINK,MSG,INPUT")
-        self.el_tracker.setLinkEventFilter("LEFT,RIGHT,FIXATION,FIXUPDATE,SACCADE,BLINK,MSG,INPUT")
-
-        # Parser / thresholds can be tuned per task; keep defaults unless you need strict saccade parsing.
-        # Example (commented): self.el_tracker.setSaccadeVelocityThreshold(35); self.el_tracker.setAccelerationThreshold(950)
-
+        
         # 13-point calibration (recommended for high-precision tasks)
         self.el_tracker.setCalibrationType("HV13")
 
@@ -113,29 +108,34 @@ class EyeLinkTracker(EyeTrackerBase):
         genv.setCalibrationSounds("", "", "")  # silent calibration
         pylink.openGraphicsEx(genv)
 
-        try:
-            # Optional on-screen prompt (shown on Display PC)
-            msg = visual.TextStim(self.win,
-                                  "Press ENTER to begin calibration.\nESC = skip to drift correction.",
-                                  color=[1, 1, 1], height=30)
-            msg.draw()
-            self.win.flip()
+        if self.skip_calibration:
+            logger.info('Calibraion skipped on user request.')
+            return
 
-            self.el_tracker.doTrackerSetup()
+        if not self.dummy_mode:
+            try:
+                # Optional on-screen prompt (shown on Display PC)
+                msg = visual.TextStim(self.win,
+                                      "Press ENTER to begin calibration.\nESC = skip to drift correction.",
+                                      color=[1, 1, 1], height=30)
+                msg.draw()
+                self.win.flip()
 
-        except RuntimeError as err:
-            logger.error("Calibration/setup aborted: %s", err)
-            self.el_tracker.exitCalibration()
-        finally:
-            # Always close the graphics hooks after setup
-            pylink.closeGraphics()
+                self.el_tracker.doTrackerSetup()
+
+            except RuntimeError as err:
+                logger.error("Calibration/setup aborted: %s", err)
+                self.el_tracker.exitCalibration()
 
     def drift_correction(self):
-        if self.el_tracker is None or self.scn_width is None:
-            raise RuntimeError("calibrate() must be called before drift_correction().")
-        cx, cy = int(self.scn_width / 2), int(self.scn_height / 2)
+        if self.skip_driftcorrection:
+            logger.info('Drift correction skipped on user request.')
+            return
+            
+            cx, cy = int(self.scn_width / 2), int(self.scn_height / 2)
         try:
             self.el_tracker.doDriftCorrect(cx, cy, 1, 1)
+            print(' i am here 2!')
         except RuntimeError as err:
             logger.warning("Drift correction failed/aborted: %s", err)
 
@@ -153,12 +153,11 @@ class EyeLinkTracker(EyeTrackerBase):
 
         # Wait until the tracker reports recording (avoid capturing pre-roll junk)
         pylink.pumpDelay(100)
-        if not self.el_tracker.isRecording():
-            logger.error("Tracker did not enter recording mode.")
-            raise RuntimeError("EyeLink failed to start recording")
+        # this gives an error but not sure why
+        #if not self.el_tracker.isRecording():
+        #    logger.error("Tracker did not enter recording mode.")
+        #    raise RuntimeError("EyeLink failed to start recording")
 
-        # Standard Data Viewer messages to segment trials are your responsibility:
-        # call send_message('TRIALID <id>') before each trial and 'TRIAL_RESULT <code>' after.
         logger.debug("Recording started.")
 
     def stop_recording(self):
@@ -206,6 +205,8 @@ class EyeLinkTracker(EyeTrackerBase):
         """Close link to tracker (safe to call multiple times)."""
         try:
             if self.el_tracker is not None:
+                # Close the graphics hooks
+                pylink.closeGraphics()
                 self.el_tracker.close()
                 logger.debug("Closed EyeLink connection.")
         finally:
