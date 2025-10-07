@@ -1,154 +1,215 @@
-import ctypes
+# eyetracker.py
+from __future__ import annotations
+
 import os
-import platform
 from abc import ABC, abstractmethod
-from ctypes import POINTER, Structure, byref, c_char_p, c_double, c_int
 from datetime import datetime
-from stim4prf import logger
+from typing import Optional
 
-import h5py
-import numpy as np
-import psychopy
 import pylink
-from psychopy import colors, core, event, visual
+from psychopy import visual
 
+from stim4prf import logger
 from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 
 
 # ----------- Eyetracker Base -----------
 class EyeTrackerBase(ABC):
     @abstractmethod
-    def calibrate(self, win):
-        pass
+    def connect(self, ip: str = "100.1.1.1"): ...
 
     @abstractmethod
-    def drift_correction(self):
-        pass
+    def calibrate(self, win): ...
 
     @abstractmethod
-    def start_recording(self):
-        pass
+    def drift_correction(self): ...
 
     @abstractmethod
-    def stop_recording(self):
-        pass
+    def start_recording(self): ...
 
     @abstractmethod
-    def send_message(self, msg):
-        pass
+    def stop_recording(self): ...
 
     @abstractmethod
-    def download_data(self, fname):
-        pass
+    def send_message(self, msg: str): ...
 
     @abstractmethod
-    def save_hdf5(self, fname):
-        pass
+    def download_data(self, trial_tsv_name: str): ...
+
+    @abstractmethod
+    def close(self): ...
 
 
 # ----------- EyeLink Tracker Implementation -----------
 class EyeLinkTracker(EyeTrackerBase):
     """
     EyeLink tracker integration for PsychoPy.
-    Handles calibration, drift correction, recording, event marking, and EDF download.
+    Handles connection, configuration, calibration graphics, drift correction,
+    recording, standard Data Viewer messages, and EDF download.
     """
 
-    def __init__(self, outdir, dummy_mode=False):
+    def __init__(self, outdir: str, dummy_mode: bool = False, session_name: Optional[str] = None):
         self.outdir = outdir
         os.makedirs(outdir, exist_ok=True)
         self.dummy_mode = dummy_mode
-        self.el_tracker = None
+        self.el_tracker: Optional[pylink.EyeLink] = None
+        self.win = None
+        self.scn_width, self.scn_height = None, None
 
-    def connect(self, ip="100.1.1.1"):
-        if self.dummy_mode:
-            self.el_tracker = pylink.EyeLink(None)
-            logger.info("Initialized dummy EyeLink tracker.")
-        else:
-            try:
-                self.el_tracker = pylink.EyeLink(ip)
-                logger.info("Successfully connected to EyeLink tracker.")
-            except:
-                logger.exception("Could not connect to eyetracker!")
-                raise
-        if not self.el_tracker.isConnected():
-            logger.exception("tracker not connected!")
+        # EDF must be <= 8 characters (no extension). Use compact session tag + time.
+        base = (session_name or "S")[:3].upper() + datetime.now().strftime("%H%M%S")
+        self.edf_file = (base[:8]).upper() + ".edf"
+
+    # ---- lifecycle ----
+    def connect(self, ip: str = "100.1.1.1"):
+        try:
+            self.el_tracker = pylink.EyeLink(None if self.dummy_mode else ip)
+            logger.info("Connected to EyeLink tracker (dummy=%s).", self.dummy_mode)
+        except Exception:
+            logger.exception("Could not connect to EyeLink tracker.")
             raise
-        timestamp = datetime.now().strftime("T%H%M%S")
-        self.edf_file = timestamp + ".edf"
-        self.el_tracker.openDataFile(self.edf_file)
+
+        if not self.el_tracker.isConnected():
+            logger.error("EyeLink tracker not connected.")
+            raise RuntimeError("EyeLink tracker not connected")
+
+        # Open EDF and set into offline (required before many config commands)
         self.el_tracker.setOfflineMode()
-        self.el_tracker.sendCommand("calibration_type = HV13")
+        self.el_tracker.openDataFile(self.edf_file)
+
+        # Set experiment name on Host (appears in header/host UI)
+        self.el_tracker.setName("stim4prf")
+
+        # Standard sampling/event filters for EDF and Link
+        # (left+right gaze, pupil, area, status; and common events incl. FIXUPDATE for link)
+        self.el_tracker.setFileSampleFilter("LEFT,RIGHT,GAZE,AREA,PUPIL,STATUS")
+        self.el_tracker.setLinkSampleFilter("LEFT,RIGHT,GAZE,AREA,HTARGET,PUPIL,STATUS")
+        self.el_tracker.setFileEventFilter("LEFT,RIGHT,FIXATION,SACCADE,BLINK,MSG,INPUT")
+        self.el_tracker.setLinkEventFilter("LEFT,RIGHT,FIXATION,FIXUPDATE,SACCADE,BLINK,MSG,INPUT")
+
+        # Parser / thresholds can be tuned per task; keep defaults unless you need strict saccade parsing.
+        # Example (commented): self.el_tracker.setSaccadeVelocityThreshold(35); self.el_tracker.setAccelerationThreshold(950)
+
+        # 13-point calibration (recommended for high-precision tasks)
+        self.el_tracker.setCalibrationType("HV13")
 
     def calibrate(self, win):
+        if self.el_tracker is None:
+            raise RuntimeError("connect() must be called before calibrate().")
         self.win = win
         self.scn_width, self.scn_height = self.win.size
-        el_coords = (
+
+        # Announce pixel coords to Host + Data Viewer
+        self.el_tracker.sendCommand(
             f"screen_pixel_coords = 0 0 {self.scn_width - 1} {self.scn_height - 1}"
         )
-        self.el_tracker.sendCommand(el_coords)
-        dv_coords = f"DISPLAY_COORDS  0 0 {self.scn_width - 1} {self.scn_height - 1}"
-        self.el_tracker.sendMessage(dv_coords)
-        genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
-        genv.setTargetType("circle")
-        genv.setCalibrationSounds("", "", "")
-        pylink.openGraphicsEx(genv)
-
-        if not self.dummy_mode:
-            et_calib_msg = (
-                "Press ENTER to calibrate tracker or ESC to jump to drift correction!"
-            )
-            msg = visual.TextStim(self.win, et_calib_msg, color=[1, 1, 1], height=30)
-            msg.draw()
-            self.win.flip()
-            try:
-                self.el_tracker.doTrackerSetup()
-            except RuntimeError as err:
-                logger.error(err)
-                self.el_tracker.exitCalibration()
-
-    def drift_correction(self):
-        self.el_tracker.doDriftCorrect(
-            int(self.scn_width / 2), int(self.scn_height / 2), 1, 1
+        self.el_tracker.sendMessage(
+            f"DISPLAY_COORDS 0 0 {self.scn_width - 1} {self.scn_height - 1}"
         )
 
+        # PsychoPy calibration graphics
+        genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
+        genv.setTargetType("circle")
+        genv.setCalibrationSounds("", "", "")  # silent calibration
+        pylink.openGraphicsEx(genv)
+
+        try:
+            # Optional on-screen prompt (shown on Display PC)
+            msg = visual.TextStim(self.win,
+                                  "Press ENTER to begin calibration.\nESC = skip to drift correction.",
+                                  color=[1, 1, 1], height=30)
+            msg.draw()
+            self.win.flip()
+
+            self.el_tracker.doTrackerSetup()
+
+        except RuntimeError as err:
+            logger.error("Calibration/setup aborted: %s", err)
+            self.el_tracker.exitCalibration()
+        finally:
+            # Always close the graphics hooks after setup
+            pylink.closeGraphics()
+
+    def drift_correction(self):
+        if self.el_tracker is None or self.scn_width is None:
+            raise RuntimeError("calibrate() must be called before drift_correction().")
+        cx, cy = int(self.scn_width / 2), int(self.scn_height / 2)
+        try:
+            self.el_tracker.doDriftCorrect(cx, cy, 1, 1)
+        except RuntimeError as err:
+            logger.warning("Drift correction failed/aborted: %s", err)
+
+    # ---- recording ----
     def start_recording(self):
+        if self.el_tracker is None:
+            raise RuntimeError("connect() must be called before start_recording().")
+
         self.el_tracker.setOfflineMode()
+        # Clear host screen (optional cosmetic)
+        self.el_tracker.sendCommand("clear_screen 0")
+
+        # Start recording: samples, events, link
         self.el_tracker.startRecording(1, 1, 1, 1)
+
+        # Wait until the tracker reports recording (avoid capturing pre-roll junk)
         pylink.pumpDelay(100)
+        if not self.el_tracker.isRecording():
+            logger.error("Tracker did not enter recording mode.")
+            raise RuntimeError("EyeLink failed to start recording")
+
+        # Standard Data Viewer messages to segment trials are your responsibility:
+        # call send_message('TRIALID <id>') before each trial and 'TRIAL_RESULT <code>' after.
+        logger.debug("Recording started.")
 
     def stop_recording(self):
+        if self.el_tracker is None:
+            return
+        # Small delay to ensure last samples are written
         pylink.pumpDelay(100)
-        self.el_tracker.stopRecording()
+        try:
+            self.el_tracker.stopRecording()
+            logger.debug("Recording stopped.")
+        except RuntimeError as err:
+            logger.warning("stopRecording raised: %s", err)
 
-    def send_message(self, msg):
-        self.el_tracker.sendMessage(msg)
+    # ---- messaging & data ----
+    def send_message(self, msg: str):
+        if self.el_tracker is not None:
+            self.el_tracker.sendMessage(msg)
 
-    def download_data(self, fname):
-        local_edf = os.path.join(self.outdir, fname.replace(".tsv", ".edf"))
+    def download_data(self, trial_tsv_name: str):
+        """
+        Close EDF and transfer it to outdir; name matches the trial file with .edf suffix.
+        """
+        if self.el_tracker is None:
+            raise RuntimeError("No tracker connection to download from.")
+
+        local_edf = os.path.join(self.outdir, trial_tsv_name.replace(".tsv", ".edf"))
+
         self.el_tracker.setOfflineMode()
         self.el_tracker.sendCommand("clear_screen 0")
         pylink.msecDelay(500)
-        self.el_tracker.closeDataFile()
-        try:
-            self.el_tracker.receiveDataFile(self.edf_file, local_edf)
-            logger.info(f"Successfully downloaded EDF file to {local_edf}")
-        except RuntimeError as err:
-            logger.error(err)
-        self.el_tracker.close()
-        logger.debug("Closed connection to EyeLink tracker.")
 
-    def save_hdf5(self, fname):
-        """
-        Save event log and metadata to HDF5.
-        Gaze data is not included here (use EDF for full data).
-        """
-        raise NotImplementedError(
-            "HDF5 saving is not implemented for EyeLink tracker. Use EDF files for full data."
-        )
-        pass
-        filename = os.path.join(self.outdir, fname.replace(".tsv", ".h5"))
-        with h5py.File(filename, "w") as f:
-            pass
+        try:
+            self.el_tracker.closeDataFile()
+        except RuntimeError as err:
+            logger.warning("closeDataFile raised: %s", err)
+
+        try:
+            # Host->Display transfer; will overwrite if exists (desired in reruns)
+            self.el_tracker.receiveDataFile(self.edf_file, local_edf)
+            logger.info("EDF downloaded to %s", local_edf)
+        except RuntimeError as err:
+            logger.error("EDF transfer failed: %s", err)
+
+    def close(self):
+        """Close link to tracker (safe to call multiple times)."""
+        try:
+            if self.el_tracker is not None:
+                self.el_tracker.close()
+                logger.debug("Closed EyeLink connection.")
+        finally:
+            self.el_tracker = None
 
 
 """

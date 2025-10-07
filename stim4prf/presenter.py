@@ -138,7 +138,7 @@ class PRFStimulusPresenter:
         run: str,
         outdir: str,
         button_keys=None,
-        ip: str = None,
+        ip: str | None = None,
     ) -> None:
         """
         Run the stimulus presentation.
@@ -187,17 +187,15 @@ class PRFStimulusPresenter:
         log_fpath = os.path.join(outdir, log_fname)
         os.makedirs(outdir, exist_ok=True)
 
-        # --- Eyetracker setup and calibration ---
+        # --- Eyetracker setup and calibration (no recording yet) ---
         if self.eyetracker:
             if self.verbose:
                 logger.info("Starting eyetracker calibration...")
-            self.eyetracker.connect(ip=ip)
+            # Ensure a valid IP string for non-dummy mode
+            self.eyetracker.connect(ip=ip or "100.1.1.1")
             self.eyetracker.calibrate(self.win)
             self.eyetracker.drift_correction()
-            self.eyetracker.start_recording()
-            self.eyetracker.send_message(
-                msg=f"EXPERIMENT_START {subject} {session} {run}"
-            )
+
 
         # --- Show start screen: fixation + instructions ---
         # Draw fixation at center
@@ -233,6 +231,16 @@ class PRFStimulusPresenter:
             logger.info("Awaiting scanner trigger...")
 
         all_events = []  # Collect all events for logging
+        aborted = False
+
+        if self.eyetracker:
+            # Start eyetracker recording
+            if self.verbose:
+                logger.info("Starting eyetracker recording...")
+            self.eyetracker.start_recording()
+            self.eyetracker.send_message(
+                msg=f"run about to start sub-{subject} ses-{session} run-{run}"
+            )
 
         try:
             # --- Wait for scanner trigger or abort key ---
@@ -241,13 +249,22 @@ class PRFStimulusPresenter:
                     keyList=[self.trigger_key, self.abort_key], waitRelease=False
                 )
                 if any(k.name == self.abort_key for k in keys):
-                    logger.info("Aborted by user.")
-                    return
+                    logger.info("Aborted by user before start.")
+                    aborted = True
+                    break
                 elif any(k.name == self.trigger_key for k in keys):
                     break
                 core.wait(0.001)
             if self.verbose:
                 logger.info("Scanner trigger received, starting presentation.")
+            if aborted:
+                # Skip recording/presentation; cleanup happens in finally
+                return
+
+            if self.eyetracker:
+                self.eyetracker.send_message(f"BLOCK_START sub-{subject} ses-{session} run-{run}")
+                self.eyetracker.send_message(f"TRIALID 1")
+                self.eyetracker.send_message("EXPERIMENT_START")
 
             # --- Initialize clocks and event logs ---
             global_clock = core.Clock()
@@ -259,14 +276,15 @@ class PRFStimulusPresenter:
 
             # --- Mark stimulus onset for eyetracker ---
             if self.eyetracker:
-                self.eyetracker.send_message(msg="stimulus_onset")
+                self.eyetracker.send_message("stimulus_onset")
 
             # --- Main stimulus presentation loop ---
             while frame_idx < self.nFrames:
                 # --- Check for abort key ---
                 if kb.getKeys(keyList=[self.abort_key], waitRelease=False):
-                    logger.info("Aborted by user.")
-                    return
+                    logger.info("Aborted by user during run.")
+                    aborted = True
+                    break
 
                 t = global_clock.getTime()
 
@@ -312,6 +330,12 @@ class PRFStimulusPresenter:
             self.win.flip()
             core.wait(self.end_screen_wait)
 
+            # --- Mark stimulus end for eyetracker ---
+            if self.eyetracker:
+                self.eyetracker.send_message("TRIAL_RESULT 0")
+                self.eyetracker.send_message("BLOCK_END")
+                self.eyetracker.send_message("EXPERIMENT_END")
+
             # --- Collect all events for logging ---
             for idx, onset in enumerate(frame_onsets):
                 all_events.append((onset, "frame_onset", idx))
@@ -351,9 +375,18 @@ class PRFStimulusPresenter:
             raise
         finally:
             # --- Cleanup: close window and eyetracker ---
+            if self.eyetracker:
+                # Always try to end cleanly (even if aborted)
+                self.eyetracker.send_message("stimulus_end")
+                try:
+                    self.eyetracker.stop_recording()
+                except Exception:
+                    pass
+                # Pull EDF once per run
+                try:
+                    self.eyetracker.download_data(log_fname)
+                finally:
+                    self.eyetracker.close()
+            # --- Close window last ---
             if hasattr(self, "win") and self.win:
                 self.win.close()
-            if self.eyetracker:
-                self.eyetracker.send_message(msg="stimulus_end")
-                self.eyetracker.stop_recording()
-                self.eyetracker.download_data(log_fname)
