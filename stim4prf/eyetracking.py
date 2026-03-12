@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 import pylink
-from psychopy import visual
+from psychopy import core, event, visual
 
 from stim4prf import logger
 from .EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
@@ -51,7 +51,7 @@ class EyeLinkTracker(EyeTrackerBase):
     recording, standard Data Viewer messages, and EDF download.
     """
 
-    def __init__(self, outdir: str, dummy_mode: bool = False, skip_calibration: bool = False, skip_driftcorrection: bool = False, session_name: Optional6[str] = None):
+    def __init__(self, outdir: str, dummy_mode: bool = False, skip_calibration: bool = False, skip_driftcorrection: bool = False, session_name: Optional[str] = None, calib_margin: float = 0.85):
         self.outdir = outdir
         os.makedirs(outdir, exist_ok=True)
         self.dummy_mode = dummy_mode
@@ -60,6 +60,9 @@ class EyeLinkTracker(EyeTrackerBase):
         self.scn_width, self.scn_height = None, None
         self.skip_calibration = skip_calibration
         self.skip_driftcorrection = skip_driftcorrection
+        # Proportion of screen used for calibration points (0–1).
+        # 0.85 keeps points ~7.5% away from each edge; reduce if edges are cut off.
+        self.calib_margin = calib_margin
 
         # EDF must be <= 8 characters (no extension). Use compact session tag + time.
         base = (session_name or "S")[:3].upper() + datetime.now().strftime("%H%M%S")
@@ -84,7 +87,7 @@ class EyeLinkTracker(EyeTrackerBase):
 
         # Set experiment name on Host (appears in header/host UI)
         self.el_tracker.setName("stim4prf")
-        
+
         # 13-point calibration (recommended for high-precision tasks)
         self.el_tracker.setCalibrationType("HV13")
 
@@ -102,6 +105,14 @@ class EyeLinkTracker(EyeTrackerBase):
             f"DISPLAY_COORDS 0 0 {self.scn_width - 1} {self.scn_height - 1}"
         )
 
+        # Constrain calibration/validation targets away from screen edges
+        self.el_tracker.sendCommand(
+            f"calibration_area_proportion {self.calib_margin} {self.calib_margin}"
+        )
+        self.el_tracker.sendCommand(
+            f"validation_area_proportion {self.calib_margin} {self.calib_margin}"
+        )
+
         # PsychoPy calibration graphics
         genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
         genv.setTargetType("circle")
@@ -109,35 +120,50 @@ class EyeLinkTracker(EyeTrackerBase):
         pylink.openGraphicsEx(genv)
 
         if self.skip_calibration:
-            logger.info('Calibraion skipped on user request.')
+            logger.info('Calibration skipped on user request.')
             return
 
         if not self.dummy_mode:
-            try:
-                # Optional on-screen prompt (shown on Display PC)
-                msg = visual.TextStim(self.win,
-                                      "Press ENTER to begin calibration.\nESC = skip to drift correction.",
-                                      color=[1, 1, 1], height=30)
-                msg.draw()
-                self.win.flip()
+            msg = visual.TextStim(
+                self.win,
+                "Press ENTER to calibrate tracker or ESC to skip to drift correction.",
+                color=[1, 1, 1], height=30,
+            )
+            msg.draw()
+            self.win.flip()
 
-                self.el_tracker.doTrackerSetup()
-
-            except RuntimeError as err:
-                logger.error("Calibration/setup aborted: %s", err)
-                self.el_tracker.exitCalibration()
+            # Wait for operator to choose calibration or skip
+            waiting = True
+            while waiting:
+                keys = event.getKeys()
+                if "return" in keys or "enter" in keys:
+                    try:
+                        self.el_tracker.doTrackerSetup()
+                    except RuntimeError as err:
+                        logger.error("Calibration/setup aborted: %s", err)
+                        self.el_tracker.exitCalibration()
+                    waiting = False
+                elif "escape" in keys:
+                    logger.info("Skipping calibration, jumping to drift correction.")
+                    waiting = False
+                core.wait(0.01)  # prevent busy waiting
 
     def drift_correction(self):
         if self.skip_driftcorrection:
             logger.info('Drift correction skipped on user request.')
             return
-            
-            cx, cy = int(self.scn_width / 2), int(self.scn_height / 2)
+
+        cx, cy = int(self.scn_width / 2), int(self.scn_height / 2)
         try:
             self.el_tracker.doDriftCorrect(cx, cy, 1, 1)
-            print(' i am here 2!')
         except RuntimeError as err:
             logger.warning("Drift correction failed/aborted: %s", err)
+        finally:
+            # CRITICAL: close pylink graphics so PsychoPy regains full control
+            # of the keyboard event queue. Without this, pylink keeps calling
+            # get_input_key() → event.getKeys() and consumes scanner triggers
+            # before the main loop can see them.
+            pylink.closeGraphics()
 
     # ---- recording ----
     def start_recording(self):
@@ -194,12 +220,32 @@ class EyeLinkTracker(EyeTrackerBase):
         except RuntimeError as err:
             logger.warning("closeDataFile raised: %s", err)
 
+        # receiveDataFile internally calls pylink_get_input_key via pump_delay,
+        # which requires a registered graphics environment. drift_correction
+        # closed pylink graphics, so we must re-open here or the SDK will
+        # dereference a null pointer and crash (SIGSEGV).
+        if self.win is not None:
+            msg = visual.TextStim(
+                self.win,
+                text=f"Downloading eye tracker data\n({self.edf_file})\nPlease wait...",
+                color="white",
+                height=0.05,
+                units="norm",
+            )
+            msg.draw()
+            self.win.flip()
+            genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
+            pylink.openGraphicsEx(genv)
+
         try:
-            # Host->Display transfer; will overwrite if exists (desired in reruns)
             self.el_tracker.receiveDataFile(self.edf_file, local_edf)
             logger.info("EDF downloaded to %s", local_edf)
         except RuntimeError as err:
             logger.error("EDF transfer failed: %s", err)
+        finally:
+            pylink.closeGraphics()
+            if self.win is not None:
+                self.win.flip()
 
     def close(self):
         """Close link to tracker (safe to call multiple times)."""

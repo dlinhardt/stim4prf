@@ -3,6 +3,7 @@ bids_logs/*
 logs/*
 stimuli/*
 eyetracker/*
+data/*
 
 # Byte-compiled / optimized / DLL files
 **/*.py[cod]
