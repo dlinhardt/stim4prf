@@ -166,7 +166,7 @@ class PRFStimulusPresenter:
         kb.clearEvents()
         while True:
             keys = kb.getKeys(
-                keyList=["return", "enter", "space", self.abort_key], waitRelease=False
+                keyList=["return", "enter", "space", self.abort_key], waitRelease=True
             )
             if any(k.name == self.abort_key for k in keys):
                 logger.info("Aborted by user.")
@@ -247,7 +247,7 @@ class PRFStimulusPresenter:
             # --- Wait for scanner trigger or abort key ---
             while True:
                 keys = kb.getKeys(
-                    keyList=[self.trigger_key, self.abort_key], waitRelease=False
+                    keyList=[self.trigger_key, self.abort_key], waitRelease=True
                 )
                 if any(k.name == self.abort_key for k in keys):
                     logger.info("Aborted by user before start.")
@@ -282,7 +282,7 @@ class PRFStimulusPresenter:
             # --- Main stimulus presentation loop ---
             while frame_idx < self.nFrames:
                 # --- Check for abort key ---
-                if kb.getKeys(keyList=[self.abort_key], waitRelease=False):
+                if kb.getKeys(keyList=[self.abort_key], waitRelease=True):
                     logger.info("Aborted by user during run.")
                     aborted = True
                     break
@@ -290,14 +290,14 @@ class PRFStimulusPresenter:
                 t = global_clock.getTime()
 
                 # --- Log scanner trigger key presses ---
-                if kb.getKeys(keyList=[self.trigger_key], waitRelease=False):
+                if kb.getKeys(keyList=[self.trigger_key], waitRelease=True):
                     scan_trigger_times.append(t)
                     if self.eyetracker:
                         self.eyetracker.send_message(msg="scanner_trigger")
 
                 # --- Log button presses ---
                 pressed = kb.getKeys(
-                    keyList=button_keys, waitRelease=False, clear=False
+                    keyList=button_keys, waitRelease=True, clear=False
                 )
                 for key in pressed:
                     if key.name not in prev_button_state:

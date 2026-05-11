@@ -158,12 +158,6 @@ class EyeLinkTracker(EyeTrackerBase):
             self.el_tracker.doDriftCorrect(cx, cy, 1, 1)
         except RuntimeError as err:
             logger.warning("Drift correction failed/aborted: %s", err)
-        finally:
-            # CRITICAL: close pylink graphics so PsychoPy regains full control
-            # of the keyboard event queue. Without this, pylink keeps calling
-            # get_input_key() → event.getKeys() and consumes scanner triggers
-            # before the main loop can see them.
-            pylink.closeGraphics()
 
     # ---- recording ----
     def start_recording(self):
@@ -234,8 +228,6 @@ class EyeLinkTracker(EyeTrackerBase):
             )
             msg.draw()
             self.win.flip()
-            genv = EyeLinkCoreGraphicsPsychoPy(self.el_tracker, self.win)
-            pylink.openGraphicsEx(genv)
 
         try:
             self.el_tracker.receiveDataFile(self.edf_file, local_edf)
