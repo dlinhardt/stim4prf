@@ -68,6 +68,9 @@ class MatlabStimulusLoader(StimulusLoader):
         lut = self.normalize_lut(lut, self.verbose)
         frame_duration = stimulus["stimulus"]["seqtiming"].ravel()[0][1]
 
+        # No parameter attrs in .mat files; keep an empty dict for reporting.
+        self.params = {}
+
         # transpose the matrix to match the correct orientation
         indexed_matrix = np.moveaxis(indexed_matrix, -2, -1)
 
@@ -110,6 +113,12 @@ class HDF5StimulusLoader(StimulusLoader):
         indexed_matrix = images[frames_to_show]
         lut = self.normalize_lut(lut, self.verbose)
         frame_duration = 1 / params["tempFreq"]
+
+        # Keep stimulus params (numpy scalars -> native Python) for reporting.
+        self.params = {
+            k: (v.item() if isinstance(v, np.generic) else v)
+            for k, v in params.items()
+        }
 
         # transpose the matrix to match the correct orientation
         indexed_matrix = np.moveaxis(indexed_matrix, -2, -1)

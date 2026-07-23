@@ -11,6 +11,7 @@ from stim4prf import logger
 from .eyetracking import EyeLinkTracker, MRCEyeTracking
 from .fixation import ABCTargetFixation, FixationCross, FixationDot
 from .reaction_time import analyze_reaction_times
+from .report import write_run_report
 
 
 def get_screen_size(screen: int):
@@ -354,7 +355,7 @@ class PRFStimulusPresenter:
 
                 # --- Reaction time analysis ---
                 switch_log = getattr(self.fixation, "switch_log", [])
-                n_hits, n_switches, mean_rt, _ = analyze_reaction_times(
+                n_hits, n_switches, mean_rt, reaction_times = analyze_reaction_times(
                     switch_log, button_events
                 )
                 hit_ratio = (n_hits / n_switches * 100) if n_switches > 0 else 0
@@ -367,6 +368,37 @@ class PRFStimulusPresenter:
                 writer.writerow(["result", "", result2])
             if self.verbose:
                 logger.info(f"Saved timing log: {log_fpath}")
+
+            # --- Save full HDF5 run report (params + behavior + events) ---
+            report_path = os.path.splitext(log_fpath)[0] + "_report.h5"
+            try:
+                write_run_report(
+                    report_path,
+                    presenter=self,
+                    run_args={
+                        "subject": subject,
+                        "session": session,
+                        "run": run,
+                        "outdir": outdir,
+                        "button_keys": button_keys,
+                        "ip": ip,
+                    },
+                    button_events=button_events,
+                    switch_log=switch_log,
+                    scan_trigger_times=scan_trigger_times,
+                    n_frames_presented=len(frame_onsets),
+                    run_duration=frame_onsets[-1] if frame_onsets else 0.0,
+                    behavior={
+                        "n_hits": n_hits,
+                        "n_switches": n_switches,
+                        "hit_ratio": hit_ratio,
+                        "mean_rt": mean_rt,
+                        "reaction_times": reaction_times,
+                    },
+                    aborted=aborted,
+                )
+            except Exception as e:
+                logger.warning(f"Could not write HDF5 run report: {e}")
 
         except Exception as e:
             logger.error(f"Exception during run: {e}")
