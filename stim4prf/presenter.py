@@ -271,7 +271,6 @@ class PRFStimulusPresenter:
             global_clock = core.Clock()
             frame_onsets = []
             button_events = []
-            prev_button_state = set()
             frame_idx = 0
             scan_trigger_times = []
 
@@ -296,15 +295,11 @@ class PRFStimulusPresenter:
                         self.eyetracker.send_message(msg="scanner_trigger")
 
                 # --- Log button presses ---
-                pressed = kb.getKeys(
-                    keyList=button_keys, waitRelease=True, clear=False
-                )
+                pressed = kb.getKeys(keyList=button_keys, waitRelease=True)
                 for key in pressed:
-                    if key.name not in prev_button_state:
-                        button_events.append((t, key.name))
-                        if self.eyetracker:
-                            self.eyetracker.send_message(msg=f"button_press {key.name}")
-                prev_button_state = set(k.name for k in pressed)
+                    button_events.append((t, key.name))
+                    if self.eyetracker:
+                        self.eyetracker.send_message(msg=f"button_press {key.name}")
 
                 # --- Present next stimulus frame if time ---
                 if t >= (frame_idx * self.frame_duration):
